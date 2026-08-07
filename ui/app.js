@@ -537,16 +537,16 @@ function renderClientList() {
   for (const c of clients) {
     const chip = document.createElement('span');
     chip.className = 'client-chip' + (c.id === state.selectedClientId ? ' selected' : '');
-    chip.title = '单击选择发送目标，双击重命名';
     const label = c.name || c.remote_addr || c.id.slice(0, 8);
-    chip.innerHTML = `<span>${escapeHtml(label)}</span><span class="rename-hint">✎</span>`;
-    chip.addEventListener('click', () => {
+    chip.innerHTML = `<span class="client-label">${escapeHtml(label)}</span><span class="client-actions"><span class="rename-hint" title="重命名">✎</span><span class="disconnect-hint" title="断开连接">×</span></span>`;
+    chip.querySelector('.client-label').addEventListener('click', (ev) => {
+      ev.stopPropagation();
       state.selectedClientId = c.id;
       renderClientList();
       updateSendArea();
     });
-    chip.addEventListener('dblclick', async (ev) => {
-      ev.preventDefault();
+    chip.querySelector('.rename-hint').addEventListener('click', async (ev) => {
+      ev.stopPropagation();
       const newName = prompt('重命名客户端（留空清除）', c.name || '');
       if (newName === null) return;
       const trimmed = newName.trim();
@@ -557,6 +557,15 @@ function renderClientList() {
         updateSendArea();
       } catch (e) {
         alert('重命名失败: ' + e);
+      }
+    });
+    chip.querySelector('.disconnect-hint').addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      if (!confirm('确定断开此客户端连接？')) return;
+      try {
+        await invoke('disconnect_client', { sessionId: id, clientId: c.id });
+      } catch (e) {
+        alert('断开失败: ' + e);
       }
     });
     els.clientList.appendChild(chip);
@@ -653,7 +662,8 @@ document.querySelectorAll('.detail-tabs button').forEach((btn) => {
 });
 
 listen('session:status', (ev) => {
-  const data = ev.payload;
+  // TimelineEvent 是用 tag=data 序列化的，所以读 data 字段
+  const data = ev.payload.data || ev.payload;
   const s = findSession(data.session_id);
   if (s) {
     s.status = data.status;
@@ -663,23 +673,22 @@ listen('session:status', (ev) => {
   }
 }).catch((e) => console.error('listen session:status failed', e));
 
-listen('session:client_connected', (ev) => {
+listen('session:client_connected', async (ev) => {
   const { session_id, client_id, remote_addr } = ev.payload;
-  const list = state.clients.get(session_id) || [];
-  if (!list.find((c) => c.id === client_id)) {
-    list.push({ id: client_id, remote_addr, name: null });
-    state.clients.set(session_id, list);
-  }
+  // 强制从后端重新加载客户端列表，确保状态一致
+  const list = await invoke('list_clients', { sessionId: session_id }).catch(() => []);
+  state.clients.set(session_id, list);
   if (state.selectedSessionId === session_id) {
     renderClientList();
     updateSendArea();
   }
 }).catch((e) => console.error('listen client_connected failed', e));
 
-listen('session:client_disconnected', (ev) => {
+listen('session:client_disconnected', async (ev) => {
   const { session_id, client_id } = ev.payload;
-  const list = state.clients.get(session_id) || [];
-  state.clients.set(session_id, list.filter((c) => c.id !== client_id));
+  // 强制从后端重新加载客户端列表，确保状态一致
+  const list = await invoke('list_clients', { sessionId: session_id }).catch(() => []);
+  state.clients.set(session_id, list);
   if (state.selectedClientId === client_id) state.selectedClientId = null;
   if (state.selectedSessionId === session_id) {
     renderClientList();

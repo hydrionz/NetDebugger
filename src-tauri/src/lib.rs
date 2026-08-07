@@ -101,6 +101,7 @@ pub fn run() {
             commands::subscribe_timeline,
             commands::list_clients,
             commands::update_client_name,
+            commands::disconnect_client,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

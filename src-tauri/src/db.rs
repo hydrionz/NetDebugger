@@ -71,7 +71,36 @@ pub async fn open_db(path: &str) -> Result<Connection> {
         .await
         .with_context(|| format!("open db at {}", path))?;
     run_migrations(&conn).await?;
+    reset_all_sessions_to_idle(&conn).await?;
     Ok(conn)
+}
+
+/// 应用启动时把所有会话状态重置为 idle，因为它们都没有在运行
+pub async fn reset_all_sessions_to_idle(conn: &Connection) -> Result<()> {
+    let now = chrono::Utc::now().timestamp_millis();
+    conn.call(move |conn| {
+        // 清空所有旧的客户端记录，因为应用重启时所有连接都已经断开
+        conn.execute("DELETE FROM clients", [])?;
+        // 重置所有会话状态为 idle
+        conn.execute(
+            "UPDATE sessions SET status = 'idle', updated_at = ?1",
+            params![&now.to_string()],
+        )?;
+        Ok(())
+    })
+    .await
+    .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("reset sessions: {}", e))
+}
+
+/// 删除指定会话的所有客户端记录
+pub async fn delete_clients_by_session(conn: &Connection, session_id: &str) -> Result<()> {
+    let session_id = session_id.to_string();
+    conn.call(move |conn| {
+        conn.execute("DELETE FROM clients WHERE session_id = ?1", params![&session_id])?;
+        Ok(())
+    })
+    .await
+    .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("delete clients: {}", e))
 }
 
 async fn run_migrations(conn: &Connection) -> Result<()> {

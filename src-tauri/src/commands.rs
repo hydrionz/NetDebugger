@@ -187,7 +187,36 @@ pub async fn stop_session(state: State<'_ , AppState>, id: String) -> Result<(),
         db::update_session_status(&state.db, &id, "closed", None, None)
             .await
             .map_err(|e| e.to_string())?;
+        db::delete_clients_by_session(&state.db, &id)
+            .await
+            .map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn disconnect_client(
+    state: State<'_ , AppState>,
+    session_id: String,
+    client_id: String,
+) -> Result<(), String> {
+    let handle = {
+        let sessions = state.sessions.read().await;
+        sessions.get(&session_id).cloned()
+    };
+
+    let handle = handle.ok_or_else(|| "session not running".to_string())?;
+
+    let client_shutdown_tx = {
+        let clients = handle.clients.read().await;
+        clients
+            .get(&client_id)
+            .map(|c| c.shutdown_tx.clone())
+            .ok_or_else(|| "client not found".to_string())?
+    };
+
+    let _ = client_shutdown_tx.send(()).await;
+
     Ok(())
 }
 

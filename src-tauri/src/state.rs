@@ -49,6 +49,7 @@ pub struct ClientHandle {
     pub id: String,
     pub remote_addr: String,
     pub outbound_tx: mpsc::Sender<ClientMessage>,
+    pub shutdown_tx: mpsc::Sender<()>,
 }
 
 pub struct SessionHandle {

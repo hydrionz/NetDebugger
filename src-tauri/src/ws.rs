@@ -82,10 +82,12 @@ pub async fn run_ws_server(
                         };
 
                         let (client_outbound_tx, client_outbound_rx) = mpsc::channel::<ClientMessage>(64);
+                        let (client_shutdown_tx, client_shutdown_rx) = mpsc::channel::<()>(1);
                         let client_handle = ClientHandle {
                             id: client_id.clone(),
                             remote_addr: remote_addr.clone(),
                             outbound_tx: client_outbound_tx,
+                            shutdown_tx: client_shutdown_tx,
                         };
 
                         {
@@ -120,6 +122,7 @@ pub async fn run_ws_server(
                                 ws_stream,
                                 handle_clone,
                                 client_outbound_rx,
+                                client_shutdown_rx,
                                 remote_addr_clone,
                             )
                             .await;
@@ -167,6 +170,7 @@ async fn run_client_socket_loop<S>(
     ws_stream: tokio_tungstenite::WebSocketStream<S>,
     handle: Arc<SessionHandle>,
     mut outbound_rx: mpsc::Receiver<ClientMessage>,
+    mut client_shutdown_rx: mpsc::Receiver<()>,
     _remote_addr: String,
 ) where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
@@ -215,22 +219,37 @@ async fn run_client_socket_loop<S>(
                     break;
                 }
             }
+            _ = client_shutdown_rx.recv() => {
+                // Server requested to disconnect this client.
+                break;
+            }
         }
     }
 
-    // Remove client.
+    // Cleanup client resources.
+    cleanup_client(&app, &db, &session_id, &client_id, &handle).await;
+}
+
+async fn cleanup_client(
+    app: &AppHandle,
+    db: &db::DbConnection,
+    session_id: &str,
+    client_id: &str,
+    handle: &Arc<SessionHandle>,
+) {
+    // Remove from session's client map.
     {
         let mut clients = handle.clients.write().await;
-        clients.remove(&client_id);
+        clients.remove(client_id);
     }
     // Delete from DB.
-    let _ = db::delete_client(&db, &client_id).await;
+    let _ = db::delete_client(db, client_id).await;
     // Notify UI.
     let _ = app.emit(
         "session:client_disconnected",
         serde_json::json!({
-            "session_id": &session_id,
-            "client_id": &client_id,
+            "session_id": session_id,
+            "client_id": client_id,
         }),
     );
 }
@@ -442,6 +461,8 @@ async fn set_closed(
     local_addr: Option<&str>,
     remote_addr: Option<&str>,
 ) {
+    // Clean up all clients for this session in DB.
+    let _ = db::delete_clients_by_session(db, session_id).await;
     db::update_session_status(db, session_id, "closed", local_addr, remote_addr)
         .await
         .ok();
