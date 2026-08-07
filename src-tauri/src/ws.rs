@@ -2,7 +2,7 @@ use crate::db;
 use crate::state::{ClientHandle, ClientMessage, OutgoingMessage, SessionHandle, TimelineEvent, WsConfig};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tokio_tungstenite::{accept_async, connect_async, tungstenite::protocol::Message as WsMessage};
@@ -160,6 +160,10 @@ pub async fn run_ws_server(
     }
 
     set_closed(&app, &db, &session_id, local_addr.as_deref(), None).await;
+    // 任务退出，从 state.sessions 里移除自己
+    let state = app.state::<crate::state::AppState>();
+    let mut sessions = state.sessions.write().await;
+    sessions.remove(&session_id);
 }
 
 async fn run_client_socket_loop<S>(
@@ -381,6 +385,10 @@ async fn run_socket_loop<S>(
     }
 
     set_closed(&app, &db, &session_id, local_addr.as_deref(), Some(&remote_addr)).await;
+    // 任务退出，从 state.sessions 里移除自己
+    let state = app.state::<crate::state::AppState>();
+    let mut sessions = state.sessions.write().await;
+    sessions.remove(&session_id);
 }
 
 async fn persist_in_message(
