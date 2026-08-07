@@ -485,14 +485,17 @@ function updateSendArea() {
     els.sendInput.disabled = true;
     els.sendType.disabled = true;
     els.sendTarget.disabled = true;
+    document.getElementById('btn-send').disabled = true;
     return;
   }
   const s = findSession(id);
   if (!s) return;
 
-  els.sendInput.disabled = false;
-  els.sendType.disabled = false;
-  els.sendTarget.disabled = false;
+  const isConnected = s.status === 'running';
+  els.sendInput.disabled = !isConnected;
+  els.sendType.disabled = !isConnected;
+  els.sendTarget.disabled = !isConnected;
+  document.getElementById('btn-send').disabled = !isConnected;
 
   if (s.role === 'server') {
     const allOpt = document.createElement('option');
@@ -670,6 +673,10 @@ listen('session:status', (ev) => {
     s.local_addr = data.local_addr;
     s.remote_addr = data.remote_addr;
     renderProjectTree();
+    // 如果当前选中的是这个会话，更新发送区域状态
+    if (state.selectedSessionId === data.session_id) {
+      updateSendArea();
+    }
   }
 }).catch((e) => console.error('listen session:status failed', e));
 
