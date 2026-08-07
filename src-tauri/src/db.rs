@@ -75,9 +75,27 @@ pub async fn open_db(path: &str) -> Result<Connection> {
 }
 
 async fn run_migrations(conn: &Connection) -> Result<()> {
-    for sql in MIGRATIONS {
-        conn.call(|conn| conn.execute_batch(sql).map_err(tokio_rusqlite::Error::from))
+    let current_version: i64 = conn
+        .call(|conn| {
+            conn.query_row("PRAGMA user_version", [], |row| row.get(0))
+                .map_err(tokio_rusqlite::Error::from)
+        })
+        .await?;
+
+    let start = current_version.max(0) as usize;
+    for (idx, sql) in MIGRATIONS.iter().enumerate() {
+        if idx < start {
+            continue;
+        }
+        let sql = *sql;
+        conn.call(move |conn| conn.execute_batch(sql).map_err(tokio_rusqlite::Error::from))
             .await?;
+        let new_version = (idx + 1) as i64;
+        conn.call(move |conn| {
+            conn.execute_batch(&format!("PRAGMA user_version = {}", new_version))
+                .map_err(tokio_rusqlite::Error::from)
+        })
+        .await?;
     }
     Ok(())
 }
