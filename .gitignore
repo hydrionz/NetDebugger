@@ -1,0 +1,24 @@
+# Rust / Cargo
+/src-tauri/target/
+/src-tauri/gen/schemas
+
+# Tauri build artifacts
+/src-tauri/gen/android
+/src-tauri/gen/apple
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local app data (sqlite db etc.) if ever produced inside repo
+*.db
+*.db-shm
+*.db-wal
+
+# Serena MCP tool local project config
+.serena/

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Net Debugger</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="toolbar">
+      <button id="btn-new-project">+ 新建项目</button>
+      <button id="btn-new-session">+ 新建连接</button>
+      <div class="spacer"></div>
+      <button id="btn-clear">清空</button>
+      <button id="btn-settings">设置</button>
+    </header>
+
+    <main class="workspace">
+      <aside class="sidebar">
+        <div id="project-tree"></div>
+      </aside>
+
+      <section class="main-pane">
+        <div id="client-list-bar" class="client-list-bar hidden">
+          <span class="client-list-label">客户端:</span>
+          <span id="client-list" class="client-list"></span>
+        </div>
+        <div id="timeline" class="timeline"></div>
+        <div class="send-area">
+          <div class="send-row">
+            <label>目标: <select id="send-target"></select></label>
+            <label>类型: <select id="send-type">
+              <option value="text">文本</option>
+              <option value="binary">二进制</option>
+            </select></label>
+            <button id="btn-send">发送</button>
+          </div>
+          <textarea id="send-input" placeholder="输入要发送的消息..."></textarea>
+        </div>
+      </section>
+
+      <aside class="detail-pane">
+        <div id="detail-empty" class="detail-empty">选择一条消息查看详情</div>
+        <div id="detail-content" class="detail-content hidden">
+          <div class="detail-row"><span>方向:</span> <span id="detail-direction"></span></div>
+          <div class="detail-row"><span>时间:</span> <span id="detail-time"></span></div>
+          <div class="detail-row"><span>大小:</span> <span id="detail-size"></span></div>
+          <div class="detail-row"><span>类型:</span> <span id="detail-type"></span></div>
+          <div class="detail-tabs">
+            <button data-tab="text" class="active">文本</button>
+            <button data-tab="json">JSON</button>
+            <button data-tab="hex">十六进制</button>
+          </div>
+          <pre id="detail-body"></pre>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <dialog id="dlg-project">
+    <form method="dialog">
+      <h3>新建项目</h3>
+      <input type="text" id="project-name" placeholder="项目名称" required />
+      <div class="dialog-actions">
+        <button value="cancel">取消</button>
+        <button value="ok" id="btn-project-ok">确定</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-session">
+    <form method="dialog">
+      <h3 id="dlg-session-title">新建连接</h3>
+      <input type="hidden" id="edit-session-id" />
+      <label>名称: <input type="text" id="session-name" placeholder="自定义名称（可选）" /></label>
+      <label>项目: <select id="session-project"></select></label>
+      <label>协议: <select id="session-protocol">
+        <option value="ws">WebSocket</option>
+      </select></label>
+      <label>角色: <select id="session-role">
+        <option value="server">服务端</option>
+        <option value="client">客户端</option>
+      </select></label>
+      <div id="session-server-config">
+        <input type="text" id="session-bind" placeholder="监听地址，如 127.0.0.1:8080" value="127.0.0.1:8080" />
+      </div>
+      <div id="session-client-config" class="hidden">
+        <input type="text" id="session-url" placeholder="目标地址，如 ws://127.0.0.1:8080" value="ws://127.0.0.1:8080" />
+      </div>
+      <div class="dialog-actions">
+        <button value="cancel">取消</button>
+        <button value="ok" id="btn-session-ok">确定</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
