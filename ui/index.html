@@ -21,43 +21,49 @@
         <div id="project-tree"></div>
       </aside>
 
-      <section class="main-pane">
-        <div id="client-list-bar" class="client-list-bar hidden">
-          <span class="client-list-label">客户端:</span>
-          <span id="client-list" class="client-list"></span>
+      <div id="content-area" class="content-area">
+        <div class="no-selection-placeholder">
+          <div class="no-selection-icon">🔗</div>
+          <div class="no-selection-text">选择一个连接开始调试</div>
         </div>
-        <div id="timeline" class="timeline"></div>
-        <div class="send-area">
-          <div class="send-row">
-            <label>目标: <select id="send-target"></select></label>
-            <label>类型: <select id="send-type">
-              <option value="text">文本</option>
-              <option value="binary">二进制</option>
-            </select></label>
-            <button id="btn-send">发送</button>
+        <section class="main-pane">
+          <div id="client-list-bar" class="client-list-bar hidden">
+            <span class="client-list-label">客户端:</span>
+            <span id="client-list" class="client-list"></span>
           </div>
-          <textarea id="send-input" placeholder="输入要发送的消息..."></textarea>
-        </div>
-      </section>
+          <div id="timeline" class="timeline"></div>
+          <div class="send-area">
+            <div class="send-row">
+              <label>目标: <select id="send-target"></select></label>
+              <label>类型: <select id="send-type">
+                <option value="text">文本</option>
+                <option value="binary">二进制</option>
+              </select></label>
+              <button id="btn-send">发送</button>
+            </div>
+            <textarea id="send-input" placeholder="输入要发送的消息..."></textarea>
+          </div>
+        </section>
 
-      <aside class="detail-pane">
-        <div id="detail-empty" class="detail-empty">
-          <div class="detail-empty-icon">📋</div>
-          <div>选择一条消息查看详情</div>
-        </div>
-        <div id="detail-content" class="detail-content hidden">
-          <div class="detail-row"><span>方向:</span> <span id="detail-direction"></span></div>
-          <div class="detail-row"><span>时间:</span> <span id="detail-time"></span></div>
-          <div class="detail-row"><span>大小:</span> <span id="detail-size"></span></div>
-          <div class="detail-row"><span>类型:</span> <span id="detail-type"></span></div>
-          <div class="detail-tabs">
-            <button data-tab="text" class="active">文本</button>
-            <button data-tab="json">JSON</button>
-            <button data-tab="hex">十六进制</button>
+        <aside class="detail-pane">
+          <div id="detail-empty" class="detail-empty">
+            <div class="detail-empty-icon">📋</div>
+            <div>选择一条消息查看详情</div>
           </div>
-          <pre id="detail-body"></pre>
-        </div>
-      </aside>
+          <div id="detail-content" class="detail-content hidden">
+            <div class="detail-row"><span>方向:</span> <span id="detail-direction"></span></div>
+            <div class="detail-row"><span>时间:</span> <span id="detail-time"></span></div>
+            <div class="detail-row"><span>大小:</span> <span id="detail-size"></span></div>
+            <div class="detail-row"><span>类型:</span> <span id="detail-type"></span></div>
+            <div class="detail-tabs">
+              <button data-tab="text" class="active">文本</button>
+              <button data-tab="json">JSON</button>
+              <button data-tab="hex">十六进制</button>
+            </div>
+            <pre id="detail-body"></pre>
+          </div>
+        </aside>
+      </div>
     </main>
   </div>
 

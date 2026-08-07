@@ -94,6 +94,47 @@ button.primary:hover {
   padding: 8px;
 }
 
+.content-area {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+
+.content-area.no-selection {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.content-area.no-selection .main-pane,
+.content-area.no-selection .detail-pane {
+  display: none;
+}
+
+.no-selection-placeholder {
+  display: none;
+}
+
+.content-area.no-selection .no-selection-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  text-align: center;
+  user-select: none;
+}
+
+.no-selection-icon {
+  font-size: 80px;
+  margin-bottom: 20px;
+  opacity: 0.6;
+}
+
+.no-selection-text {
+  font-size: 18px;
+}
+
 .main-pane {
   flex: 1;
   display: flex;
@@ -122,26 +163,6 @@ button.primary:hover {
 
 .timeline.empty::before {
   display: none;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-muted);
-  user-select: none;
-}
-
-.empty-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
-  opacity: 0.6;
-}
-
-.empty-text {
-  font-size: 16px;
 }
 
 .message {

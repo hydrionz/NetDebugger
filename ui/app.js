@@ -329,6 +329,7 @@ async function selectSession(id) {
   state.selectedClientId = null;
   state.messages.set(id, []);
   state.clients.set(id, []);
+  updateContentArea();
   renderProjectTree();
   renderTimeline();
   renderDetail();
@@ -402,12 +403,6 @@ function renderTimeline() {
   const id = state.selectedSessionId;
   if (!id) {
     els.timeline.classList.add('empty');
-    els.timeline.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">🔗</div>
-        <div class="empty-text">选择一个连接开始调试</div>
-      </div>
-    `;
     return;
   }
   els.timeline.classList.remove('empty');
@@ -481,6 +476,15 @@ function renderDetailBody(m) {
     }
   } else {
     els.detailBody.textContent = bytesToText(bytes);
+  }
+}
+
+function updateContentArea() {
+  const contentArea = document.getElementById('content-area');
+  if (state.selectedSessionId) {
+    contentArea.classList.remove('no-selection');
+  } else {
+    contentArea.classList.add('no-selection');
   }
 }
 
@@ -710,4 +714,5 @@ listen('session:client_disconnected', async (ev) => {
 }).catch((e) => console.error('listen client_disconnected failed', e));
 
 // Init
+updateContentArea();
 loadProjects();
