@@ -32,26 +32,45 @@ pub fn run() {
 
             app.manage(state::AppState::new(db));
 
-            // Restore window size.
+            // Restore window size. Guard against corrupted/too-small values
+            // (e.g. a minimized-window size that was accidentally persisted
+            // in an earlier version) by enforcing the same minimums as the
+            // window config in tauri.conf.json.
+            const MIN_WIDTH: u32 = 800;
+            const MIN_HEIGHT: u32 = 600;
+
             if let Ok(store) = app.store("store.bin") {
                 if let Some(v) = store.get("window-size") {
                     if let (Some(w), Some(h)) = (
                         v.get("width").and_then(|x| x.as_u64()),
                         v.get("height").and_then(|x| x.as_u64()),
                     ) {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.set_size(tauri::Size::Physical(
-                                tauri::PhysicalSize::new(w as u32, h as u32),
-                            ));
+                        let (w, h) = (w as u32, h as u32);
+                        if w >= MIN_WIDTH && h >= MIN_HEIGHT {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.set_size(tauri::Size::Physical(
+                                    tauri::PhysicalSize::new(w, h),
+                                ));
+                            }
+                        } else {
+                            // Stored size is bogus (e.g. captured while the
+                            // window was minimized) — drop it so it doesn't
+                            // keep shrinking the window on every launch.
+                            store.delete("window-size");
+                            let _ = store.save();
                         }
                     }
                 }
 
-                // Save window size on resize.
+                // Save window size on resize — but skip minimized/too-small
+                // sizes so a minimize action never poisons the stored value.
                 if let Some(window) = app.get_webview_window("main") {
                     let store = store.clone();
                     window.on_window_event(move |event| {
                         if let WindowEvent::Resized(size) = event {
+                            if size.width < MIN_WIDTH || size.height < MIN_HEIGHT {
+                                return;
+                            }
                             store.set(
                                 "window-size",
                                 json!({

@@ -132,15 +132,19 @@ pub async fn run_ws_server(
                 }
             }
             out = outbound_rx.recv() => {
-                // Broadcast to all connected clients.
-                let msg = match out {
-                    Some(OutgoingMessage::Text(t)) => ClientMessage::Text(t),
-                    Some(OutgoingMessage::Binary(b)) => ClientMessage::Binary(b),
+                // Broadcast to all connected clients. Persist exactly once for the
+                // logical broadcast action (client_id = None means "sent to all"),
+                // regardless of how many clients are currently connected.
+                let (payload_type, payload_bytes, client_msg) = match out {
+                    Some(OutgoingMessage::Text(t)) => ("text", t.clone().into_bytes(), ClientMessage::Text(t)),
+                    Some(OutgoingMessage::Binary(b)) => ("binary", b.clone(), ClientMessage::Binary(b)),
                     None => break,
                 };
+                persist_out_message(&db, &session_id, None, payload_type, payload_bytes, &handle).await;
+
                 let clients = handle.clients.read().await;
                 for c in clients.values() {
-                    let _ = c.outbound_tx.send(match &msg {
+                    let _ = c.outbound_tx.send(match &client_msg {
                         ClientMessage::Text(t) => ClientMessage::Text(t.clone()),
                         ClientMessage::Binary(b) => ClientMessage::Binary(b.clone()),
                     }).await;
@@ -192,13 +196,16 @@ async fn run_client_socket_loop<S>(
                 }
             }
             out = outbound_rx.recv() => {
+                // Persistence for this client's message happens at the point the
+                // send was initiated (commands::send_message for a targeted send,
+                // or the broadcast arm above for "send to all") — this loop only
+                // writes to the socket, so a broadcast doesn't get persisted once
+                // per connected client.
                 let result = match out {
                     Some(ClientMessage::Text(text)) => {
-                        persist_out_message(&db, &session_id, Some(&client_id), "text", text.clone().into_bytes(), &handle).await;
                         write.send(WsMessage::Text(text.into())).await
                     }
                     Some(ClientMessage::Binary(bin)) => {
-                        persist_out_message(&db, &session_id, Some(&client_id), "binary", bin.clone(), &handle).await;
                         write.send(WsMessage::Binary(bin.into())).await
                     }
                     None => break,
@@ -389,7 +396,7 @@ async fn persist_in_message(
     }).await;
 }
 
-async fn persist_out_message(
+pub(crate) async fn persist_out_message(
     db: &db::DbConnection,
     session_id: &str,
     client_id: Option<&str>,

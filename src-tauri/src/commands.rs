@@ -207,11 +207,25 @@ pub async fn send_message(
     let handle = handle.ok_or_else(|| "session not running".to_string())?;
 
     if let Some(client_id) = client_id {
-        // Send to a specific client (server only).
+        // Send to a specific client (server only). Persist exactly once here,
+        // at the point the send is initiated, then hand off a raw write to the
+        // client's socket task (it no longer persists on its own).
         let clients = handle.clients.read().await;
         let client = clients
             .get(&client_id)
             .ok_or_else(|| "client not found".to_string())?;
+
+        let payload_type_owned = payload_type.clone();
+        ws::persist_out_message(
+            &state.db,
+            &session_id,
+            Some(&client_id),
+            &payload_type_owned,
+            payload.clone().into_bytes(),
+            &handle,
+        )
+        .await;
+
         let msg = match payload_type.as_str() {
             "binary" => ClientMessage::Binary(payload.into_bytes()),
             _ => ClientMessage::Text(payload),

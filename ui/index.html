@@ -9,7 +9,7 @@
 <body>
   <div id="app">
     <header class="toolbar">
-      <button id="btn-new-project">+ 新建项目</button>
+      <button id="btn-new-project">+ 新建分组</button>
       <button id="btn-new-session">+ 新建连接</button>
       <div class="spacer"></div>
       <button id="btn-clear">清空</button>
@@ -60,10 +60,10 @@
 
   <dialog id="dlg-project">
     <form method="dialog">
-      <h3>新建项目</h3>
-      <input type="text" id="project-name" placeholder="项目名称" required />
+      <h3>新建分组</h3>
+      <input type="text" id="project-name" placeholder="分组名称" required />
       <div class="dialog-actions">
-        <button value="cancel">取消</button>
+        <button value="cancel" formnovalidate>取消</button>
         <button value="ok" id="btn-project-ok">确定</button>
       </div>
     </form>
@@ -74,7 +74,7 @@
       <h3 id="dlg-session-title">新建连接</h3>
       <input type="hidden" id="edit-session-id" />
       <label>名称: <input type="text" id="session-name" placeholder="自定义名称（可选）" /></label>
-      <label>项目: <select id="session-project"></select></label>
+      <label>分组: <select id="session-project"></select></label>
       <label>协议: <select id="session-protocol">
         <option value="ws">WebSocket</option>
       </select></label>
@@ -89,7 +89,7 @@
         <input type="text" id="session-url" placeholder="目标地址，如 ws://127.0.0.1:8080" value="ws://127.0.0.1:8080" />
       </div>
       <div class="dialog-actions">
-        <button value="cancel">取消</button>
+        <button value="cancel" formnovalidate>取消</button>
         <button value="ok" id="btn-session-ok">确定</button>
       </div>
     </form>

@@ -101,7 +101,7 @@ function renderProjectTree() {
     const isUngrouped = p.project.id === '_ungrouped';
     const deleteBtn = isUngrouped
       ? ''
-      : `<button data-action="delete-project" data-project="${p.project.id}" title="删除项目">×</button>
+      : `<button data-action="delete-project" data-project="${p.project.id}" title="删除分组">×</button>
       `;
 
     const header = document.createElement('div');
@@ -251,13 +251,13 @@ async function createProject() {
     els.projectName.value = '';
     await loadProjects();
   } catch (e) {
-    alert('创建项目失败: ' + e);
+    alert('创建分组失败: ' + e);
   }
 }
 
 async function deleteProject(id) {
   if (id === '_ungrouped') return;
-  if (!confirm('确定删除该项目及其所有会话和消息？')) return;
+  if (!confirm('确定删除该分组及其所有会话和消息？')) return;
   try {
     await invoke('delete_project', { id });
     if (state.selectedSessionId && !findSession(state.selectedSessionId)) {
@@ -265,7 +265,7 @@ async function deleteProject(id) {
     }
     await loadProjects();
   } catch (e) {
-    alert('删除项目失败: ' + e);
+    alert('删除分组失败: ' + e);
   }
 }
 
