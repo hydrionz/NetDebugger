@@ -121,10 +121,27 @@ button.primary:hover {
 }
 
 .timeline.empty::before {
-  content: "选择一个会话开始调试";
+  display: none;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
   color: var(--text-muted);
-  text-align: center;
-  padding-top: 40px;
+  user-select: none;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.empty-text {
+  font-size: 16px;
 }
 
 .message {
@@ -347,6 +364,18 @@ button.primary:hover {
   color: var(--text-muted);
   text-align: center;
   padding-top: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  user-select: none;
+}
+
+.detail-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.6;
 }
 
 .detail-row {

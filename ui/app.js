@@ -402,6 +402,12 @@ function renderTimeline() {
   const id = state.selectedSessionId;
   if (!id) {
     els.timeline.classList.add('empty');
+    els.timeline.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🔗</div>
+        <div class="empty-text">选择一个连接开始调试</div>
+      </div>
+    `;
     return;
   }
   els.timeline.classList.remove('empty');
