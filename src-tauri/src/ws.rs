@@ -154,6 +154,11 @@ pub async fn run_ws_server(
                 }
             }
             _ = shutdown_rx.recv() => {
+                // 服务端停止，通知所有已连接的客户端任务退出
+                let clients = handle.clients.read().await;
+                for client in clients.values() {
+                    let _ = client.shutdown_tx.send(()).await;
+                }
                 break;
             }
         }
