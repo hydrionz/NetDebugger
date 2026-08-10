@@ -45,8 +45,8 @@ const els = {
   sessionClientConfig: document.getElementById('session-client-config'),
   sessionBind: document.getElementById('session-bind'),
   sessionUrl: document.getElementById('session-url'),
+  sessionClientEndpoint: document.getElementById('session-client-endpoint'),
   endpointList: document.getElementById('endpoint-list'),
-  endpointListTitle: document.getElementById('endpoint-list-title'),
   endpointInput: document.getElementById('endpoint-input'),
   btnEndpointAdd: document.getElementById('btn-endpoint-add'),
   timelineSearch: document.getElementById('timeline-search'),
@@ -148,9 +148,10 @@ function renderProjectTree() {
     list.className = 'session-list';
 
     for (const s of p.sessions) {
-      // endpoint 子节点集合（配置的 + 已加载消息中出现的）
-      const eps = new Set(s.endpoints || []);
-      for (const m of state.messages.get(s.id) || []) if (m.endpoint) eps.add(m.endpoint);
+      // endpoint 子节点集合（配置的 + 已加载消息中出现的）；仅服务端展示
+      const isServer = s.role === 'server';
+      const eps = new Set(isServer ? (s.endpoints || []) : []);
+      for (const m of state.messages.get(s.id) || []) if (isServer && m.endpoint) eps.add(m.endpoint);
       const hasEps = eps.size > 0;
       const collapsed = state.collapsedSessions.has(s.id);
 
@@ -298,11 +299,12 @@ function openSessionDialog(projectId) {
   els.sessionName.value = '';
   els.sessionProject.value = projectId || '';
   els.sessionRole.value = 'server';
+  els.sessionRole.disabled = false;
   els.sessionProtocol.disabled = false;
   els.sessionBind.value = '127.0.0.1:8080';
   els.sessionUrl.value = '127.0.0.1:8080';
+  els.sessionClientEndpoint.value = '';
   state.endpointDraft = [];
-  updateEndpointListTitle();
   renderEndpointList();
   els.sessionServerConfig.classList.remove('hidden');
   els.sessionClientConfig.classList.add('hidden');
@@ -315,14 +317,16 @@ function openEditSessionDialog(session) {
   els.sessionName.value = session.name || '';
   els.sessionProject.value = session.project_id || '';
   els.sessionRole.value = session.role;
-  // 连接创建后协议不允许修改
+  // 连接创建后协议、角色不允许修改
+  els.sessionRole.disabled = true;
   els.sessionProtocol.disabled = true;
   state.endpointDraft = (session.endpoints || []).slice();
-  updateEndpointListTitle();
+  els.sessionClientEndpoint.value = (session.endpoints || [])[0] || '';
   renderEndpointList();
   if (session.role === 'server') {
     els.sessionBind.value = session.bind_addr || '';
     els.sessionUrl.value = '127.0.0.1:8080';
+    els.sessionClientEndpoint.value = '';
     els.sessionServerConfig.classList.remove('hidden');
     els.sessionClientConfig.classList.add('hidden');
   } else {
@@ -339,13 +343,6 @@ function openEditSessionDialog(session) {
 function stripWsPrefix(url) {
   const m = /^(wss?:\/\/)?(.*)$/.exec(url);
   return m ? m[2] : url;
-}
-
-// 根据角色更新 endpoint 列表标题文案
-function updateEndpointListTitle() {
-  els.endpointListTitle.textContent = els.sessionRole.value === 'server'
-    ? 'Endpoint 路径（留空则接受所有路径）'
-    : 'Endpoint 路径（可添加多个；连接时使用第一个，拼接到目标地址后）';
 }
 
 function renderEndpointList() {
@@ -401,8 +398,11 @@ async function saveSession() {
   const editId = els.editSessionId.value.trim();
   const projectId = els.sessionProject.value.trim();
   const name = els.sessionName.value.trim();
-  const endpoints = state.endpointDraft.length ? state.endpointDraft.slice() : null;
   const isServer = els.sessionRole.value === 'server';
+  // 服务端支持多 endpoint（动态列表）；客户端一个连接只对应一个 endpoint（单输入框）。
+  const endpoints = isServer
+    ? (state.endpointDraft.length ? state.endpointDraft.slice() : null)
+    : (els.sessionClientEndpoint.value.trim() ? [els.sessionClientEndpoint.value.trim()] : null);
   const targetUrl = isServer
     ? null
     : ensureWsScheme(els.sessionUrl.value.trim());
@@ -853,7 +853,6 @@ document.getElementById('btn-session-ok').addEventListener('click', (ev) => {
 });
 
 els.sessionRole.addEventListener('change', () => {
-  updateEndpointListTitle();
   if (els.sessionRole.value === 'server') {
     els.sessionServerConfig.classList.remove('hidden');
     els.sessionClientConfig.classList.add('hidden');

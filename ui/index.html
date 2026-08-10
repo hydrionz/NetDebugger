@@ -106,17 +106,18 @@
       </select></label>
       <div id="session-server-config">
         <label>监听地址: <input type="text" id="session-bind" placeholder="如 127.0.0.1:8080" value="127.0.0.1:8080" /></label>
+        <div class="endpoint-list-editor">
+          <div id="endpoint-list-title" class="endpoint-list-title">Endpoint 路径（留空则接受所有路径）</div>
+          <div id="endpoint-list" class="endpoint-list"></div>
+          <div class="endpoint-add-row">
+            <input type="text" id="endpoint-input" placeholder="/echo" />
+            <button type="button" id="btn-endpoint-add">添加</button>
+          </div>
+        </div>
       </div>
       <div id="session-client-config" class="hidden">
-        <label>目标地址: <input type="text" id="session-url" placeholder="如 127.0.0.1:8080（只填地址端口，endpoint 路径在下方配置）" value="127.0.0.1:8080" /></label>
-      </div>
-      <div class="endpoint-list-editor">
-        <div id="endpoint-list-title" class="endpoint-list-title">Endpoint 路径（服务端留空则接受所有路径；客户端会拼接到目标地址后）</div>
-        <div id="endpoint-list" class="endpoint-list"></div>
-        <div class="endpoint-add-row">
-          <input type="text" id="endpoint-input" placeholder="/echo" />
-          <button type="button" id="btn-endpoint-add">添加</button>
-        </div>
+        <label>目标地址: <input type="text" id="session-url" placeholder="如 127.0.0.1:8080（只填地址端口）" value="127.0.0.1:8080" /></label>
+        <label>Endpoint 路径: <input type="text" id="session-client-endpoint" placeholder="如 /echo（可选，拼接到目标地址后）" /></label>
       </div>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>取消</button>
