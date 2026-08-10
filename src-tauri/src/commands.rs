@@ -146,6 +146,7 @@ pub async fn start_session(
     let (shutdown_tx, shutdown_rx) = tokio::sync::mpsc::channel::<()>(1);
     let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel::<OutgoingMessage>(256);
     let handle = Arc::new(SessionHandle {
+        app: app.clone(),
         shutdown_tx,
         outbound_tx,
         timeline_tx: tokio::sync::Mutex::new(None),

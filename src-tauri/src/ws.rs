@@ -416,16 +416,18 @@ async fn persist_in_message(
         timestamp: chrono::Utc::now().timestamp_millis(),
     };
     db::insert_message(db, &msg).await.ok();
-    send_timeline_event(handle, TimelineEvent::Message {
-        id: msg.id,
-        session_id: msg.session_id,
-        client_id: msg.client_id,
-        direction: msg.direction,
-        payload_type: msg.payload_type,
-        payload,
+    let event = TimelineEvent::Message {
+        id: msg.id.clone(),
+        session_id: msg.session_id.clone(),
+        client_id: msg.client_id.clone(),
+        direction: msg.direction.clone(),
+        payload_type: msg.payload_type.clone(),
+        payload: payload.clone(),
         size: msg.size,
         timestamp: msg.timestamp,
-    }).await;
+    };
+    send_timeline_event(handle, event.clone()).await;
+    let _ = handle.app.emit("session:message", event);
 }
 
 pub(crate) async fn persist_out_message(
@@ -448,16 +450,18 @@ pub(crate) async fn persist_out_message(
         timestamp: chrono::Utc::now().timestamp_millis(),
     };
     db::insert_message(db, &msg).await.ok();
-    send_timeline_event(handle, TimelineEvent::Message {
-        id: msg.id,
-        session_id: msg.session_id,
-        client_id: msg.client_id,
-        direction: msg.direction,
-        payload_type: msg.payload_type,
-        payload,
+    let event = TimelineEvent::Message {
+        id: msg.id.clone(),
+        session_id: msg.session_id.clone(),
+        client_id: msg.client_id.clone(),
+        direction: msg.direction.clone(),
+        payload_type: msg.payload_type.clone(),
+        payload: payload.clone(),
         size: msg.size,
         timestamp: msg.timestamp,
-    }).await;
+    };
+    send_timeline_event(handle, event.clone()).await;
+    let _ = handle.app.emit("session:message", event);
 }
 
 async fn send_timeline_event(handle: &Arc<SessionHandle>, event: TimelineEvent) {

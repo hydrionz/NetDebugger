@@ -410,18 +410,17 @@ async function selectSession(id) {
 }
 
 function appendMessage(sessionId, msg) {
+  if (state.selectedSessionId !== sessionId) return;
   const list = state.messages.get(sessionId) || [];
   list.push(msg);
-
-  // 如果收到的是非当前选中会话的消息，增加未读角标
-  if (state.selectedSessionId !== sessionId) {
-    const current = state.unreadCounts.get(sessionId) || 0;
-    state.unreadCounts.set(sessionId, current + 1);
-    renderProjectTree();
-    return;
-  }
-
   renderTimeline();
+}
+
+function incrementUnread(sessionId) {
+  if (state.selectedSessionId === sessionId) return;
+  const current = state.unreadCounts.get(sessionId) || 0;
+  state.unreadCounts.set(sessionId, current + 1);
+  renderProjectTree();
 }
 
 function renderTimeline() {
@@ -715,6 +714,14 @@ listen('session:status', (ev) => {
     }
   }
 }).catch((e) => console.error('listen session:status failed', e));
+
+listen('session:message', (ev) => {
+  // 全局消息事件，用于非选中会话的未读角标计数
+  const data = ev.payload.data || ev.payload;
+  if (data && data.session_id) {
+    incrementUnread(data.session_id);
+  }
+}).catch((e) => console.error('listen session:message failed', e));
 
 listen('session:client_connected', async (ev) => {
   const { session_id, client_id, remote_addr } = ev.payload;

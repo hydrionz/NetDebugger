@@ -53,6 +53,7 @@ pub struct ClientHandle {
 }
 
 pub struct SessionHandle {
+    pub app: tauri::AppHandle,
     pub shutdown_tx: mpsc::Sender<()>,
     pub outbound_tx: mpsc::Sender<OutgoingMessage>,
     pub timeline_tx: Mutex<Option<Channel<TimelineEvent>>>,
