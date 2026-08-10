@@ -10,6 +10,7 @@ const state = {
   clients: new Map(),
   selectedClientId: null,
   unreadCounts: new Map(),
+  endpointFilter: new Map(),
 };
 
 const els = {
@@ -40,6 +41,8 @@ const els = {
   sessionClientConfig: document.getElementById('session-client-config'),
   sessionBind: document.getElementById('session-bind'),
   sessionUrl: document.getElementById('session-url'),
+  sessionEndpoints: document.getElementById('session-endpoints'),
+  timelineFilter: document.getElementById('timeline-filter'),
   settingsView: document.getElementById('settings-view'),
   settingMinimizeToTray: document.getElementById('setting-minimize-to-tray'),
   themeRadios: document.querySelectorAll('input[name="theme"]'),
@@ -236,6 +239,7 @@ function openSessionDialog(projectId) {
   els.sessionRole.value = 'server';
   els.sessionBind.value = '127.0.0.1:8080';
   els.sessionUrl.value = 'ws://127.0.0.1:8080';
+  els.sessionEndpoints.value = '';
   els.sessionServerConfig.classList.remove('hidden');
   els.sessionClientConfig.classList.add('hidden');
   els.dlgSession.showModal();
@@ -247,6 +251,7 @@ function openEditSessionDialog(session) {
   els.sessionName.value = session.name || '';
   els.sessionProject.value = session.project_id || '';
   els.sessionRole.value = session.role;
+  els.sessionEndpoints.value = (session.endpoints || []).join(', ');
   if (session.role === 'server') {
     els.sessionBind.value = session.bind_addr || '';
     els.sessionUrl.value = 'ws://127.0.0.1:8080';
@@ -291,6 +296,12 @@ async function saveSession() {
   const editId = els.editSessionId.value.trim();
   const projectId = els.sessionProject.value.trim();
   const name = els.sessionName.value.trim();
+  const raw = els.sessionEndpoints.value;
+  let endpoints = null;
+  if (els.sessionRole.value === 'server') {
+    const list = raw.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+    endpoints = list.length ? list : null;
+  }
   const req = {
     project_id: projectId || null,
     name: name || null,
@@ -298,6 +309,7 @@ async function saveSession() {
     role: els.sessionRole.value,
     bind_addr: els.sessionRole.value === 'server' ? els.sessionBind.value.trim() || null : null,
     target_url: els.sessionRole.value === 'client' ? els.sessionUrl.value.trim() || null : null,
+    endpoints,
   };
   try {
     if (editId) {
@@ -348,12 +360,14 @@ async function selectSession(id) {
   state.selectedClientId = null;
   state.messages.set(id, []);
   state.clients.set(id, []);
+  state.endpointFilter.set(id, 'all');
   // 清空当前选中会话的未读角标
   if (id) {
     state.unreadCounts.delete(id);
     renderProjectTree();
   }
   updateContentArea();
+  populateTimelineFilter(id);
   renderTimeline();
   renderDetail();
   renderClientList();
@@ -428,6 +442,20 @@ function incrementUnread(sessionId) {
   renderProjectTree();
 }
 
+function populateTimelineFilter(sessionId) {
+  const s = findSession(sessionId);
+  els.timelineFilter.innerHTML = '<option value="all">全部</option>';
+  const eps = new Set((s && s.endpoints) || []);
+  for (const m of state.messages.get(sessionId) || []) if (m.endpoint) eps.add(m.endpoint);
+  for (const e of eps) {
+    const opt = document.createElement('option');
+    opt.value = e; opt.textContent = e;
+    els.timelineFilter.appendChild(opt);
+  }
+  const toolbar = els.timelineFilter.closest('.timeline-toolbar');
+  if (toolbar) toolbar.classList.toggle('hidden', !(s && s.role === 'server') || eps.size === 0);
+}
+
 function renderTimeline() {
   els.timeline.innerHTML = '';
   const id = state.selectedSessionId;
@@ -437,7 +465,11 @@ function renderTimeline() {
   }
   els.timeline.classList.remove('empty');
 
-  const msgs = state.messages.get(id) || [];
+  let msgs = state.messages.get(id) || [];
+  const filter = state.endpointFilter.get(id) || 'all';
+  if (filter !== 'all') {
+    msgs = msgs.filter(m => m.endpoint === filter);
+  }
   if (msgs.length === 0) {
     els.timeline.innerHTML = '<div class="detail-empty">暂无消息</div>';
     return;
@@ -448,11 +480,13 @@ function renderTimeline() {
     el.className = 'message ' + m.direction + (m.id === state.selectedMessageId ? ' selected' : '');
     el.dataset.id = m.id;
     const text = bytesToText(m.payload);
+    const epBadge = m.endpoint ? `<span class="msg-endpoint">${escapeHtml(m.endpoint)}</span>` : '';
     el.innerHTML = `
       <div class="message-meta">
         <span>${formatTime(m.timestamp)}</span>
         <span>${m.direction === 'in' ? '←' : '→'}</span>
         <span>${m.payload_type}</span>
+        ${epBadge}
       </div>
       <div class="message-body">${escapeHtml(text.slice(0, 200))}${text.length > 200 ? '…' : ''}</div>
     `;
@@ -542,11 +576,17 @@ function updateSendArea() {
     allOpt.value = 'all';
     allOpt.textContent = '所有客户端';
     els.sendTarget.appendChild(allOpt);
+    for (const path of (s.endpoints || [])) {
+      const opt = document.createElement('option');
+      opt.value = 'ep:' + path;
+      opt.textContent = `所有客户端 (${path})`;
+      els.sendTarget.appendChild(opt);
+    }
     const clients = state.clients.get(id) || [];
     for (const c of clients) {
       const opt = document.createElement('option');
       opt.value = c.id;
-      opt.textContent = c.name || c.remote_addr || c.id.slice(0, 8);
+      opt.textContent = (c.name || c.remote_addr || c.id.slice(0, 8)) + (c.endpoint ? ' (' + c.endpoint + ')' : '');
       if (c.id === state.selectedClientId) opt.selected = true;
       els.sendTarget.appendChild(opt);
     }
@@ -581,7 +621,8 @@ function renderClientList() {
     const chip = document.createElement('span');
     chip.className = 'client-chip' + (c.id === state.selectedClientId ? ' selected' : '');
     const label = c.name || c.remote_addr || c.id.slice(0, 8);
-    chip.innerHTML = `<span class="client-label">${escapeHtml(label)}</span><span class="client-actions"><span class="rename-hint" title="重命名">✎</span><span class="disconnect-hint" title="断开连接">×</span></span>`;
+    const ep = c.endpoint ? `<span class="client-ep">${escapeHtml(c.endpoint)}</span>` : '';
+    chip.innerHTML = `<span class="client-label">${escapeHtml(label)}</span>${ep}<span class="client-actions"><span class="rename-hint" title="重命名">✎</span><span class="disconnect-hint" title="断开连接">×</span></span>`;
     chip.querySelector('.client-label').addEventListener('click', (ev) => {
       ev.stopPropagation();
       state.selectedClientId = c.id;
@@ -622,10 +663,13 @@ async function sendMessage() {
   if (!text) return;
   const payloadType = els.sendType.value;
   const s = findSession(id);
-  let clientId = null;
+  let clientId = null, endpoint = null;
   if (s && s.role === 'server') {
     const v = els.sendTarget.value;
-    if (v && v !== 'all') clientId = v;
+    if (v && v !== 'all') {
+      if (v.startsWith('ep:')) endpoint = v.slice(3);
+      else clientId = v;
+    }
   }
 
   try {
@@ -634,6 +678,7 @@ async function sendMessage() {
       payload: text,
       payloadType,
       clientId,
+      endpoint,
     });
     els.sendInput.value = '';
   } catch (e) {
@@ -691,6 +736,13 @@ els.sendInput.addEventListener('keydown', (ev) => {
     ev.preventDefault();
     sendMessage();
   }
+});
+
+els.timelineFilter.addEventListener('change', () => {
+  const id = state.selectedSessionId;
+  if (!id) return;
+  state.endpointFilter.set(id, els.timelineFilter.value);
+  renderTimeline();
 });
 
 document.getElementById('btn-clear').addEventListener('click', clearMessages);

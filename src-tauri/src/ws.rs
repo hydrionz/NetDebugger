@@ -1,12 +1,22 @@
 use crate::db;
-use crate::state::{ClientHandle, ClientMessage, OutgoingMessage, SessionHandle, TimelineEvent, WsConfig};
+use crate::state::{ClientHandle, ClientMessage, OutgoingKind, OutgoingMessage, SessionHandle, TimelineEvent, WsConfig};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
-use tokio_tungstenite::{accept_async, connect_async, tungstenite::protocol::Message as WsMessage};
+use tokio_tungstenite::{accept_hdr_async, connect_async, tungstenite::protocol::Message as WsMessage};
 use uuid::Uuid;
+
+/// 判定握手路径是否被接受。None 配置 = accept-all（仍返回真实路径用于打标）；已配置则精确匹配，Err 表示拒绝。
+fn resolve_endpoint(path: &str, endpoints: Option<&[String]>) -> Result<String, ()> {
+    match endpoints {
+        None => Ok(path.to_string()),
+        Some(eps) => {
+            if eps.iter().any(|e| e == path) { Ok(path.to_string()) } else { Err(()) }
+        }
+    }
+}
 
 pub async fn run_ws_server(
     app: AppHandle,
@@ -59,21 +69,35 @@ pub async fn run_ws_server(
     emit_status(&app, &session_id, "running", local_addr.clone(), None);
 
     // Accept loop for multiple clients.
+    let endpoints: Option<Vec<String>> = config.endpoints.filter(|v| !v.is_empty());
     loop {
         tokio::select! {
             accept_result = listener.accept() => {
                 match accept_result {
                     Ok((stream, peer)) => {
                         let remote_addr = peer.to_string();
-                        let ws_stream = match accept_async(stream).await {
+                        let path_cell = Arc::new(std::sync::Mutex::new(None::<String>));
+                        let endpoints_capture = endpoints.clone();
+                        let path_cell_accept = path_cell.clone();
+                        let ws_stream = match accept_hdr_async(stream, move |req: &tokio_tungstenite::tungstenite::http::Request<()>, resp: tokio_tungstenite::tungstenite::http::Response<()>| {
+                            let path = req.uri().path().to_string();
+                            match resolve_endpoint(&path, endpoints_capture.as_deref()) {
+                                Ok(p) => { *path_cell_accept.lock().unwrap() = Some(p); Ok(resp) }
+                                Err(()) => Err(tokio_tungstenite::tungstenite::http::Response::builder()
+                                    .status(404)
+                                    .body(Some(format!("no endpoint: {}", path)))
+                                    .unwrap()),
+                            }
+                        }).await {
                             Ok(s) => s,
                             Err(e) => {
                                 eprintln!("ws server handshake error: {} for {}", e, remote_addr);
                                 continue;
                             }
                         };
+                        let endpoint = path_cell.lock().unwrap().take().unwrap_or_else(|| "/".to_string());
 
-                        let client_id = match db::create_client(&db, &session_id, Some(&remote_addr), None).await {
+                        let client_id = match db::create_client(&db, &session_id, Some(&remote_addr), None, Some(&endpoint)).await {
                             Ok(c) => c.id,
                             Err(e) => {
                                 eprintln!("create_client error: {}", e);
@@ -88,6 +112,7 @@ pub async fn run_ws_server(
                             remote_addr: remote_addr.clone(),
                             outbound_tx: client_outbound_tx,
                             shutdown_tx: client_shutdown_tx,
+                            endpoint: endpoint.clone(),
                         };
 
                         {
@@ -102,6 +127,7 @@ pub async fn run_ws_server(
                                 "session_id": &session_id,
                                 "client_id": &client_id,
                                 "remote_addr": &remote_addr,
+                                "endpoint": &endpoint,
                             }),
                         );
 
@@ -124,6 +150,7 @@ pub async fn run_ws_server(
                                 client_outbound_rx,
                                 client_shutdown_rx,
                                 remote_addr_clone,
+                                endpoint,
                             )
                             .await;
                         });
@@ -135,18 +162,24 @@ pub async fn run_ws_server(
                 }
             }
             out = outbound_rx.recv() => {
-                // Broadcast to all connected clients. Persist exactly once for the
-                // logical broadcast action (client_id = None means "sent to all"),
+                // Broadcast to all connected clients (or to a single endpoint when
+                // the OutgoingMessage carries Some(path)). Persist exactly once for
+                // the logical broadcast action (client_id = None means "sent to all"),
                 // regardless of how many clients are currently connected.
-                let (payload_type, payload_bytes, client_msg) = match out {
-                    Some(OutgoingMessage::Text(t)) => ("text", t.clone().into_bytes(), ClientMessage::Text(t)),
-                    Some(OutgoingMessage::Binary(b)) => ("binary", b.clone(), ClientMessage::Binary(b)),
+                let (msg_endpoint, payload_type, payload_bytes, client_msg) = match out {
+                    Some(OutgoingMessage { endpoint: Some(ep), kind: OutgoingKind::Text(t) }) => (Some(ep), "text", t.clone().into_bytes(), ClientMessage::Text(t)),
+                    Some(OutgoingMessage { endpoint: Some(ep), kind: OutgoingKind::Binary(b) }) => (Some(ep), "binary", b.clone(), ClientMessage::Binary(b)),
+                    Some(OutgoingMessage { endpoint: None, kind: OutgoingKind::Text(t) }) => (None, "text", t.clone().into_bytes(), ClientMessage::Text(t)),
+                    Some(OutgoingMessage { endpoint: None, kind: OutgoingKind::Binary(b) }) => (None, "binary", b.clone(), ClientMessage::Binary(b)),
                     None => break,
                 };
-                persist_out_message(&db, &session_id, None, payload_type, payload_bytes, &handle).await;
+                persist_out_message(&db, &session_id, None, payload_type, payload_bytes, msg_endpoint.as_deref(), &handle).await;
 
                 let clients = handle.clients.read().await;
                 for c in clients.values() {
+                    if let Some(ep) = &msg_endpoint {
+                        if &c.endpoint != ep { continue; }
+                    }
                     let _ = c.outbound_tx.send(match &client_msg {
                         ClientMessage::Text(t) => ClientMessage::Text(t.clone()),
                         ClientMessage::Binary(b) => ClientMessage::Binary(b.clone()),
@@ -181,6 +214,7 @@ async fn run_client_socket_loop<S>(
     mut outbound_rx: mpsc::Receiver<ClientMessage>,
     mut client_shutdown_rx: mpsc::Receiver<()>,
     _remote_addr: String,
+    endpoint: String,
 ) where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
@@ -191,10 +225,10 @@ async fn run_client_socket_loop<S>(
             msg = read.next() => {
                 match msg {
                     Some(Ok(WsMessage::Text(text))) => {
-                        persist_in_message(&db, &session_id, Some(&client_id), "text", text.as_bytes().to_vec(), &handle).await;
+                        persist_in_message(&db, &session_id, Some(&client_id), "text", text.as_bytes().to_vec(), Some(&endpoint), &handle).await;
                     }
                     Some(Ok(WsMessage::Binary(bin))) => {
-                        persist_in_message(&db, &session_id, Some(&client_id), "binary", bin.to_vec(), &handle).await;
+                        persist_in_message(&db, &session_id, Some(&client_id), "binary", bin.to_vec(), Some(&endpoint), &handle).await;
                     }
                     Some(Ok(WsMessage::Close(_))) | None => {
                         break;
@@ -348,10 +382,10 @@ async fn run_socket_loop<S>(
             msg = read.next() => {
                 match msg {
                     Some(Ok(WsMessage::Text(text))) => {
-                        persist_in_message(&db, &session_id, None, "text", text.as_bytes().to_vec(), &handle).await;
+                        persist_in_message(&db, &session_id, None, "text", text.as_bytes().to_vec(), None, &handle).await;
                     }
                     Some(Ok(WsMessage::Binary(bin))) => {
-                        persist_in_message(&db, &session_id, None, "binary", bin.to_vec(), &handle).await;
+                        persist_in_message(&db, &session_id, None, "binary", bin.to_vec(), None, &handle).await;
                     }
                     Some(Ok(WsMessage::Close(_))) | None => {
                         break;
@@ -367,12 +401,12 @@ async fn run_socket_loop<S>(
             }
             out = outbound_rx.recv() => {
                 let result = match out {
-                    Some(OutgoingMessage::Text(text)) => {
-                        persist_out_message(&db, &session_id, None, "text", text.clone().into_bytes(), &handle).await;
+                    Some(OutgoingMessage { endpoint: _, kind: OutgoingKind::Text(text) }) => {
+                        persist_out_message(&db, &session_id, None, "text", text.clone().into_bytes(), None, &handle).await;
                         write.send(WsMessage::Text(text.into())).await
                     }
-                    Some(OutgoingMessage::Binary(bin)) => {
-                        persist_out_message(&db, &session_id, None, "binary", bin.clone(), &handle).await;
+                    Some(OutgoingMessage { endpoint: _, kind: OutgoingKind::Binary(bin) }) => {
+                        persist_out_message(&db, &session_id, None, "binary", bin.clone(), None, &handle).await;
                         write.send(WsMessage::Binary(bin.into())).await
                     }
                     None => break,
@@ -402,6 +436,7 @@ async fn persist_in_message(
     client_id: Option<&str>,
     payload_type: &str,
     payload: Vec<u8>,
+    endpoint: Option<&str>,
     handle: &Arc<SessionHandle>,
 ) {
     let size = payload.len();
@@ -414,6 +449,7 @@ async fn persist_in_message(
         payload: payload.clone(),
         size,
         timestamp: chrono::Utc::now().timestamp_millis(),
+        endpoint: endpoint.map(|s| s.to_string()),
     };
     db::insert_message(db, &msg).await.ok();
     let event = TimelineEvent::Message {
@@ -422,6 +458,7 @@ async fn persist_in_message(
         client_id: msg.client_id.clone(),
         direction: msg.direction.clone(),
         payload_type: msg.payload_type.clone(),
+        endpoint: endpoint.map(|s| s.to_string()),
         payload: payload.clone(),
         size: msg.size,
         timestamp: msg.timestamp,
@@ -436,6 +473,7 @@ pub(crate) async fn persist_out_message(
     client_id: Option<&str>,
     payload_type: &str,
     payload: Vec<u8>,
+    endpoint: Option<&str>,
     handle: &Arc<SessionHandle>,
 ) {
     let size = payload.len();
@@ -448,6 +486,7 @@ pub(crate) async fn persist_out_message(
         payload: payload.clone(),
         size,
         timestamp: chrono::Utc::now().timestamp_millis(),
+        endpoint: endpoint.map(|s| s.to_string()),
     };
     db::insert_message(db, &msg).await.ok();
     let event = TimelineEvent::Message {
@@ -456,6 +495,7 @@ pub(crate) async fn persist_out_message(
         client_id: msg.client_id.clone(),
         direction: msg.direction.clone(),
         payload_type: msg.payload_type.clone(),
+        endpoint: endpoint.map(|s| s.to_string()),
         payload: payload.clone(),
         size: msg.size,
         timestamp: msg.timestamp,
@@ -502,4 +542,32 @@ fn emit_status(
             remote_addr,
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_endpoint;
+
+    #[test]
+    fn accepts_all_when_none_configured() {
+        assert_eq!(resolve_endpoint("/echo", None).unwrap(), "/echo");
+    }
+
+    #[test]
+    fn accepts_configured_path() {
+        let eps = vec!["/echo".to_string(), "/chat".to_string()];
+        assert_eq!(resolve_endpoint("/chat", Some(&eps)).unwrap(), "/chat");
+    }
+
+    #[test]
+    fn rejects_unknown_path() {
+        let eps = vec!["/echo".to_string()];
+        assert!(resolve_endpoint("/nope", Some(&eps)).is_err());
+    }
+
+    #[test]
+    fn root_path_matches_root() {
+        let eps = vec!["/".to_string()];
+        assert_eq!(resolve_endpoint("/", Some(&eps)).unwrap(), "/");
+    }
 }

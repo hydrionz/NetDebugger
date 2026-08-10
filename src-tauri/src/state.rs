@@ -8,10 +8,17 @@ use tokio_rusqlite::Connection;
 pub struct WsConfig {
     pub bind_addr: Option<String>,
     pub target_url: Option<String>,
+    pub endpoints: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
-pub enum OutgoingMessage {
+pub struct OutgoingMessage {
+    pub endpoint: Option<String>, // None = 全体广播; Some(path) = 该 endpoint 全体广播
+    pub kind: OutgoingKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum OutgoingKind {
     Text(String),
     Binary(Vec<u8>),
 }
@@ -31,6 +38,7 @@ pub enum TimelineEvent {
         client_id: Option<String>,
         direction: String,
         payload_type: String,
+        endpoint: Option<String>,
         #[serde(with = "serde_bytes")]
         payload: Vec<u8>,
         size: usize,
@@ -50,6 +58,7 @@ pub struct ClientHandle {
     pub remote_addr: String,
     pub outbound_tx: mpsc::Sender<ClientMessage>,
     pub shutdown_tx: mpsc::Sender<()>,
+    pub endpoint: String,
 }
 
 pub struct SessionHandle {

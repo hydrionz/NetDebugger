@@ -28,6 +28,7 @@ pub struct Session {
     pub remote_addr: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    pub endpoints: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +39,7 @@ pub struct Client {
     pub remote_addr: Option<String>,
     pub local_addr: Option<String>,
     pub connected_at: i64,
+    pub endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +53,7 @@ pub struct Message {
     pub payload: Vec<u8>,
     pub size: usize,
     pub timestamp: i64,
+    pub endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +67,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/002_make_project_optional.sql"),
     include_str!("../migrations/003_add_session_name.sql"),
     include_str!("../migrations/004_multi_client.sql"),
+    include_str!("../migrations/005_endpoints.sql"),
 ];
 
 pub async fn open_db(path: &str) -> Result<Connection> {
@@ -179,12 +183,13 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
         let mut result = Vec::with_capacity(projects.len());
         for project in projects {
             let mut stmt = conn.prepare(
-                "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at \
+                "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints \
                  FROM sessions WHERE project_id = ?1 ORDER BY created_at",
             )?;
             let sessions = stmt
                 .query_map(params![&project.id,
                 ], |row| {
+                    let endpoints_raw: Option<String> = row.get(12)?;
                     Ok(Session {
                         id: row.get(0)?,
                         project_id: row.get(1)?,
@@ -198,6 +203,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
                         remote_addr: row.get(9)?,
                         created_at: row.get(10)?,
                         updated_at: row.get(11)?,
+                        endpoints: endpoints_raw.and_then(|s| serde_json::from_str(&s).ok()),
                     })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -206,11 +212,12 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
 
         // Ungrouped sessions
         let mut stmt = conn.prepare(
-            "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at \
+            "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints \
              FROM sessions WHERE project_id IS NULL ORDER BY created_at",
         )?;
         let ungrouped = stmt
             .query_map([], |row| {
+                let endpoints_raw: Option<String> = row.get(12)?;
                 Ok(Session {
                     id: row.get(0)?,
                     project_id: row.get(1)?,
@@ -224,6 +231,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
                     remote_addr: row.get(9)?,
                     created_at: row.get(10)?,
                     updated_at: row.get(11)?,
+                    endpoints: endpoints_raw.and_then(|s| serde_json::from_str(&s).ok()),
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -253,6 +261,7 @@ pub async fn create_session(
     role: &str,
     bind_addr: Option<String>,
     target_url: Option<String>,
+    endpoints: Option<Vec<String>>,
 ) -> Result<Session> {
     let now = chrono::Utc::now().timestamp_millis();
     let id = Uuid::new_v4().to_string();
@@ -261,11 +270,12 @@ pub async fn create_session(
     let protocol = protocol.to_string();
     let role = role.to_string();
     let status = "idle".to_string();
+    let endpoints_json = endpoints.as_ref().map(|v| serde_json::to_string(v).expect("endpoints json"));
 
     conn.call(move |conn| {
         conn.execute(
-            "INSERT INTO sessions (id, project_id, name, protocol, role, status, bind_addr, target_url, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO sessions (id, project_id, name, protocol, role, status, bind_addr, target_url, endpoints, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 &id,
                 &project_id,
@@ -275,6 +285,7 @@ pub async fn create_session(
                 &status,
                 &bind_addr,
                 &target_url,
+                &endpoints_json,
                 &now.to_string(),
                 &now.to_string(),
             ],
@@ -292,6 +303,7 @@ pub async fn create_session(
             remote_addr: None,
             created_at: now,
             updated_at: now,
+            endpoints,
         })
     })
     .await
@@ -305,21 +317,24 @@ pub async fn update_session(
     name: Option<&str>,
     bind_addr: Option<String>,
     target_url: Option<String>,
+    endpoints: Option<Vec<String>>,
 ) -> Result<()> {
     let id = id.to_string();
     let project_id = project_id.map(|s| s.to_string());
     let name = name.map(|s| s.to_string());
     let now = chrono::Utc::now().timestamp_millis();
+    let endpoints_json = endpoints.as_ref().map(|v| serde_json::to_string(v).expect("endpoints json"));
 
     conn.call(move |conn| {
         conn.execute(
-            "UPDATE sessions SET project_id = ?2, name = ?3, bind_addr = ?4, target_url = ?5, updated_at = ?6 WHERE id = ?1",
+            "UPDATE sessions SET project_id = ?2, name = ?3, bind_addr = ?4, target_url = ?5, endpoints = ?6, updated_at = ?7 WHERE id = ?1",
             params![
                 &id,
                 &project_id,
                 &name,
                 &bind_addr,
                 &target_url,
+                &endpoints_json,
                 &now.to_string(),
             ],
         )?;
@@ -376,22 +391,25 @@ pub async fn create_client(
     session_id: &str,
     remote_addr: Option<&str>,
     local_addr: Option<&str>,
+    endpoint: Option<&str>,
 ) -> Result<Client> {
     let now = chrono::Utc::now().timestamp_millis();
     let id = Uuid::new_v4().to_string();
     let session_id = session_id.to_string();
     let remote_addr = remote_addr.map(|s| s.to_string());
     let local_addr = local_addr.map(|s| s.to_string());
+    let endpoint = endpoint.map(|s| s.to_string());
 
     conn.call(move |conn| {
         conn.execute(
-            "INSERT INTO clients (id, session_id, remote_addr, local_addr, connected_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO clients (id, session_id, remote_addr, local_addr, endpoint, connected_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 &id,
                 &session_id,
                 &remote_addr,
                 &local_addr,
+                &endpoint,
                 &now.to_string(),
             ],
         )?;
@@ -402,6 +420,7 @@ pub async fn create_client(
             remote_addr,
             local_addr,
             connected_at: now,
+            endpoint,
         })
     })
     .await
@@ -412,7 +431,7 @@ pub async fn list_clients(conn: &Connection, session_id: &str) -> Result<Vec<Cli
     let session_id = session_id.to_string();
     conn.call(move |conn| {
         let mut stmt = conn.prepare(
-            "SELECT id, session_id, name, remote_addr, local_addr, connected_at \
+            "SELECT id, session_id, name, remote_addr, local_addr, connected_at, endpoint \
              FROM clients WHERE session_id = ?1 ORDER BY connected_at",
         )?;
         let clients = stmt
@@ -425,6 +444,7 @@ pub async fn list_clients(conn: &Connection, session_id: &str) -> Result<Vec<Cli
                     remote_addr: row.get(3)?,
                     local_addr: row.get(4)?,
                     connected_at: row.get(5)?,
+                    endpoint: row.get(6)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -463,8 +483,8 @@ pub async fn insert_message(conn: &Connection, msg: &Message) -> Result<()> {
     let msg = msg.clone();
     conn.call(move |conn| {
         conn.execute(
-            "INSERT INTO messages (id, session_id, client_id, direction, payload_type, payload, size, timestamp) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO messages (id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 &msg.id,
                 &msg.session_id,
@@ -474,6 +494,7 @@ pub async fn insert_message(conn: &Connection, msg: &Message) -> Result<()> {
                 &msg.payload[..],
                 &msg.size.to_string(),
                 &msg.timestamp.to_string(),
+                &msg.endpoint,
             ],
         )?;
         Ok(())
@@ -492,7 +513,7 @@ pub async fn load_messages(
     conn.call(move |conn| {
         let messages = if let Some(before) = before {
             conn.prepare(
-                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp \
+                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint \
                  FROM messages WHERE session_id = ?1 AND timestamp < ?2 ORDER BY timestamp DESC LIMIT ?3",
             )?
             .query_map(params![
@@ -507,12 +528,13 @@ pub async fn load_messages(
                     payload: row.get(5)?,
                     size: row.get::<_, usize>(6)?,
                     timestamp: row.get(7)?,
+                    endpoint: row.get(8)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?
         } else {
             conn.prepare(
-                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp \
+                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint \
                  FROM messages WHERE session_id = ?1 ORDER BY timestamp DESC LIMIT ?2",
             )?
             .query_map(params![
@@ -527,6 +549,7 @@ pub async fn load_messages(
                     payload: row.get(5)?,
                     size: row.get::<_, usize>(6)?,
                     timestamp: row.get(7)?,
+                    endpoint: row.get(8)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?

@@ -1,5 +1,5 @@
 use crate::db;
-use crate::state::{AppState, ClientMessage, OutgoingMessage, SessionHandle, TimelineEvent, WsConfig};
+use crate::state::{AppState, ClientMessage, OutgoingKind, OutgoingMessage, SessionHandle, TimelineEvent, WsConfig};
 use crate::ws;
 use serde_json::json;
 use std::sync::Arc;
@@ -14,6 +14,7 @@ pub struct CreateSessionRequest {
     role: String,
     bind_addr: Option<String>,
     target_url: Option<String>,
+    endpoints: Option<Vec<String>>,
 }
 
 #[tauri::command]
@@ -42,6 +43,7 @@ pub async fn create_session(
     state: State<'_ , AppState>,
     req: CreateSessionRequest,
 ) -> Result<db::Session, String> {
+    let endpoints = normalize_endpoints(req.endpoints)?;
     db::create_session(
         &state.db,
         req.project_id.as_deref(),
@@ -50,6 +52,7 @@ pub async fn create_session(
         &req.role,
         req.bind_addr,
         req.target_url,
+        endpoints,
     )
     .await
     .map_err(|e| e.to_string())
@@ -62,6 +65,24 @@ pub struct UpdateSessionRequest {
     name: Option<String>,
     bind_addr: Option<String>,
     target_url: Option<String>,
+    endpoints: Option<Vec<String>>,
+}
+
+/// 校验并规范化 endpoint 路径列表：trim、跳过空串、必须 / 开头、无空白与 ?#、去重保序；全空 → None。
+fn normalize_endpoints(eps: Option<Vec<String>>) -> Result<Option<Vec<String>>, String> {
+    let Some(list) = eps else { return Ok(None) };
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for raw in list {
+        let p = raw.trim().to_string();
+        if p.is_empty() { continue; }
+        if !p.starts_with('/') { return Err(format!("endpoint 路径必须以 / 开头: {}", p)); }
+        if p.contains(char::is_whitespace) || p.contains('?') || p.contains('#') {
+            return Err(format!("endpoint 路径含非法字符: {}", p));
+        }
+        if seen.insert(p.clone()) { out.push(p); }
+    }
+    Ok(if out.is_empty() { None } else { Some(out) })
 }
 
 #[tauri::command]
@@ -82,6 +103,7 @@ pub async fn update_session(
         return Err("请先停止连接再修改".to_string());
     }
 
+    let endpoints = normalize_endpoints(req.endpoints)?;
     db::update_session(
         &state.db,
         &req.id,
@@ -89,6 +111,7 @@ pub async fn update_session(
         req.name.as_deref(),
         req.bind_addr,
         req.target_url,
+        endpoints,
     )
     .await
     .map_err(|e| e.to_string())
@@ -143,6 +166,7 @@ pub async fn start_session(
     let config = WsConfig {
         bind_addr: session.bind_addr.clone(),
         target_url: session.target_url.clone(),
+        endpoints: session.endpoints.clone(),
     };
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::mpsc::channel::<()>(1);
@@ -230,6 +254,7 @@ pub async fn send_message(
     payload: String,
     payload_type: String,
     client_id: Option<String>,
+    endpoint: Option<String>,
 ) -> Result<(), String> {
     let handle = {
         let sessions = state.sessions.read().await;
@@ -254,6 +279,7 @@ pub async fn send_message(
             Some(&client_id),
             &payload_type_owned,
             payload.clone().into_bytes(),
+            None,
             &handle,
         )
         .await;
@@ -269,10 +295,11 @@ pub async fn send_message(
             .map_err(|_| "client channel closed".to_string())
     } else {
         // Send to all (server) or to remote (client).
-        let msg = match payload_type.as_str() {
-            "binary" => OutgoingMessage::Binary(payload.into_bytes()),
-            _ => OutgoingMessage::Text(payload),
+        let kind = match payload_type.as_str() {
+            "binary" => OutgoingKind::Binary(payload.into_bytes()),
+            _ => OutgoingKind::Text(payload),
         };
+        let msg = OutgoingMessage { endpoint, kind };
         handle
             .outbound_tx
             .send(msg)
