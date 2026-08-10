@@ -1,8 +1,10 @@
 use crate::db;
 use crate::state::{AppState, ClientMessage, OutgoingMessage, SessionHandle, TimelineEvent, WsConfig};
 use crate::ws;
+use serde_json::json;
 use std::sync::Arc;
 use tauri::{ipc::Channel, AppHandle, State};
+use tauri_plugin_store::StoreExt;
 
 #[derive(serde::Deserialize)]
 pub struct CreateSessionRequest {
@@ -316,4 +318,31 @@ pub async fn update_client_name(
     db::update_client_name(&state.db, &id, name.as_deref())
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_minimize_to_tray(app: AppHandle) -> Result<bool, String> {
+    let store = app.store("store.bin").map_err(|e| e.to_string())?;
+    Ok(store
+        .get("minimize-to-tray")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false))
+}
+
+#[tauri::command]
+pub fn set_minimize_to_tray(app: AppHandle, value: bool) -> Result<(), String> {
+    let store = app.store("store.bin").map_err(|e| e.to_string())?;
+    store.set("minimize-to-tray", json!(value));
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn hide_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.hide().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn exit_app(app: AppHandle) {
+    app.exit(0);
 }

@@ -1,6 +1,6 @@
 use serde_json::json;
 use std::path::PathBuf;
-use tauri::{Manager, WindowEvent};
+use tauri::{menu::Menu, tray::TrayIconBuilder, Emitter, Manager, WindowEvent};
 use tauri_plugin_store::StoreExt;
 
 mod commands;
@@ -61,27 +61,89 @@ pub fn run() {
                         }
                     }
                 }
+            }
 
-                // Save window size on resize — but skip minimized/too-small
-                // sizes so a minimize action never poisons the stored value.
-                if let Some(window) = app.get_webview_window("main") {
-                    let store = store.clone();
-                    window.on_window_event(move |event| {
-                        if let WindowEvent::Resized(size) = event {
+            // Setup system tray icon and menu.
+            if let (Some(window), Some(icon)) =
+                (app.get_webview_window("main"), app.default_window_icon())
+            {
+                let window_for_tray = window.clone();
+                let tray_menu = Menu::with_items(
+                    app,
+                    &[
+                        &tauri::menu::MenuItem::with_id(app, "show", "显示", true, None::<&str>)?,
+                        &tauri::menu::PredefinedMenuItem::separator(app)?,
+                        &tauri::menu::MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?,
+                    ],
+                )?;
+
+                TrayIconBuilder::new()
+                    .icon(icon.clone())
+                    .menu(&tray_menu)
+                    .on_menu_event(move |app, event| match event.id.as_ref() {
+                        "show" => {
+                            let _ = window_for_tray.show();
+                            let _ = window_for_tray.set_focus();
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let tauri::tray::TrayIconEvent::Click { .. } = event {
+                            if let Some(window) = tray.app_handle().get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
+            }
+
+            // Handle window resize and close events.
+            if let Some(window) = app.get_webview_window("main") {
+                let store = app.store("store.bin")?;
+                let store_for_resize = store.clone();
+                let app_handle_for_close = app.handle().clone();
+
+                window.on_window_event(move |event| {
+                    match event {
+                        WindowEvent::Resized(size) => {
                             if size.width < MIN_WIDTH || size.height < MIN_HEIGHT {
                                 return;
                             }
-                            store.set(
+                            store_for_resize.set(
                                 "window-size",
                                 json!({
                                     "width": size.width,
                                     "height": size.height,
                                 }),
                             );
-                            let _ = store.save();
+                            let _ = store_for_resize.save();
                         }
-                    });
-                }
+                        WindowEvent::CloseRequested { api, .. } => {
+                            let minimize = app_handle_for_close
+                                .store("store.bin")
+                                .ok()
+                                .and_then(|s| s.get("minimize-to-tray"))
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
+
+                            api.prevent_close();
+
+                            if minimize {
+                                if let Some(window) = app_handle_for_close.get_webview_window("main")
+                                {
+                                    let _ = window.hide();
+                                }
+                            } else {
+                                let _ = app_handle_for_close.emit("window:close-requested", ());
+                            }
+                        }
+                        _ => {}
+                    }
+                });
             }
 
             Ok(())
@@ -102,6 +164,10 @@ pub fn run() {
             commands::list_clients,
             commands::update_client_name,
             commands::disconnect_client,
+            commands::get_minimize_to_tray,
+            commands::set_minimize_to_tray,
+            commands::hide_window,
+            commands::exit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

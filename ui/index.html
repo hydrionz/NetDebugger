@@ -113,6 +113,44 @@
     </form>
   </dialog>
 
+  <div id="settings-view" class="settings-view hidden">
+    <div class="settings-sidebar">
+      <div class="settings-category active" data-category="general">通用</div>
+    </div>
+    <div class="settings-main">
+      <div class="settings-content">
+        <h3>通用设置</h3>
+        <label class="checkbox-label">
+          <input type="checkbox" id="setting-minimize-to-tray" />
+          关闭后最小化到系统托盘
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="setting-dark-theme" checked />
+          深色主题
+        </label>
+      </div>
+      <div class="settings-footer">
+        <button id="btn-settings-close">关闭</button>
+        <button id="btn-settings-save" class="primary">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="dlg-close-confirm">
+    <form method="dialog">
+      <h3>确认关闭</h3>
+      <p>确定要关闭程序吗？</p>
+      <label class="checkbox-label">
+        <input type="checkbox" id="close-confirm-minimize-to-tray" />
+        关闭后最小化到系统托盘
+      </label>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>取消</button>
+        <button value="ok" id="btn-close-confirm-ok">确认关闭</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="app.js"></script>
 </body>
 </html>

@@ -40,6 +40,11 @@ const els = {
   sessionClientConfig: document.getElementById('session-client-config'),
   sessionBind: document.getElementById('session-bind'),
   sessionUrl: document.getElementById('session-url'),
+  settingsView: document.getElementById('settings-view'),
+  settingMinimizeToTray: document.getElementById('setting-minimize-to-tray'),
+  settingDarkTheme: document.getElementById('setting-dark-theme'),
+  dlgCloseConfirm: document.getElementById('dlg-close-confirm'),
+  closeConfirmMinimizeToTray: document.getElementById('close-confirm-minimize-to-tray'),
 };
 
 let detailTab = 'text';
@@ -690,6 +695,23 @@ els.sendInput.addEventListener('keydown', (ev) => {
 
 document.getElementById('btn-clear').addEventListener('click', clearMessages);
 
+document.getElementById('btn-settings').addEventListener('click', openSettingsView);
+
+document.getElementById('btn-settings-save').addEventListener('click', (ev) => {
+  ev.preventDefault();
+  saveSettings();
+});
+
+document.getElementById('btn-settings-close').addEventListener('click', (ev) => {
+  ev.preventDefault();
+  closeSettingsView();
+});
+
+document.getElementById('btn-close-confirm-ok').addEventListener('click', (ev) => {
+  ev.preventDefault();
+  confirmClose();
+});
+
 document.querySelectorAll('.detail-tabs button').forEach((btn) => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.detail-tabs button').forEach((b) => b.classList.remove('active'));
@@ -745,6 +767,49 @@ listen('session:client_disconnected', async (ev) => {
     updateSendArea();
   }
 }).catch((e) => console.error('listen client_disconnected failed', e));
+
+listen('window:close-requested', () => {
+  els.dlgCloseConfirm.showModal();
+}).catch((e) => console.error('listen window:close-requested failed', e));
+
+async function openSettingsView() {
+  try {
+    const value = await invoke('get_minimize_to_tray');
+    els.settingMinimizeToTray.checked = value;
+    els.settingsView.classList.remove('hidden');
+  } catch (e) {
+    console.error('get_minimize_to_tray failed', e);
+  }
+}
+
+function closeSettingsView() {
+  els.settingsView.classList.add('hidden');
+}
+
+async function saveSettings() {
+  const value = els.settingMinimizeToTray.checked;
+  try {
+    await invoke('set_minimize_to_tray', { value });
+    closeSettingsView();
+  } catch (e) {
+    alert('保存设置失败: ' + e);
+  }
+}
+
+async function confirmClose() {
+  const minimizeToTray = els.closeConfirmMinimizeToTray.checked;
+  try {
+    await invoke('set_minimize_to_tray', { value: minimizeToTray });
+    els.dlgCloseConfirm.close();
+    if (minimizeToTray) {
+      await invoke('hide_window');
+    } else {
+      await invoke('exit_app');
+    }
+  } catch (e) {
+    alert('关闭失败: ' + e);
+  }
+}
 
 // Init
 updateContentArea();
