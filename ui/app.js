@@ -9,6 +9,7 @@ const state = {
   channels: new Map(),
   clients: new Map(),
   selectedClientId: null,
+  unreadCounts: new Map(),
 };
 
 const els = {
@@ -152,9 +153,15 @@ function renderProjectTree() {
       const toggleIcon = isRunning ? '⏹' : '▶';
       const toggleTitle = isRunning ? '停止' : '启动';
 
+      const unreadCount = state.unreadCounts.get(s.id) || 0;
+      const badge = unreadCount > 0
+        ? `<span class="session-badge">${unreadCount > 99 ? '99+' : unreadCount}</span>`
+        : '';
+
       item.innerHTML = `
         <span class="session-type ${s.status}">${escapeHtml(typeLabel)}</span>
         <span class="session-name">${escapeHtml(displayName)}</span>
+        ${badge}
         <span class="session-actions">
           ${editBtn}
           <button data-action="${toggleAction}" data-session="${s.id}" title="${toggleTitle}">${toggleIcon}</button>
@@ -304,6 +311,7 @@ async function deleteSession(id) {
   if (!confirm('确定删除该连接及其消息？')) return;
   try {
     await invoke('delete_session', { id });
+    state.unreadCounts.delete(id);
     if (state.selectedSessionId === id) selectSession(null);
     await loadProjects();
   } catch (e) {
@@ -335,8 +343,12 @@ async function selectSession(id) {
   state.selectedClientId = null;
   state.messages.set(id, []);
   state.clients.set(id, []);
+  // 清空当前选中会话的未读角标
+  if (id) {
+    state.unreadCounts.delete(id);
+    renderProjectTree();
+  }
   updateContentArea();
-  renderProjectTree();
   renderTimeline();
   renderDetail();
   renderClientList();
@@ -398,9 +410,17 @@ async function selectSession(id) {
 }
 
 function appendMessage(sessionId, msg) {
-  if (state.selectedSessionId !== sessionId) return;
   const list = state.messages.get(sessionId) || [];
   list.push(msg);
+
+  // 如果收到的是非当前选中会话的消息，增加未读角标
+  if (state.selectedSessionId !== sessionId) {
+    const current = state.unreadCounts.get(sessionId) || 0;
+    state.unreadCounts.set(sessionId, current + 1);
+    renderProjectTree();
+    return;
+  }
+
   renderTimeline();
 }
 

@@ -305,6 +305,21 @@ button.primary:hover {
   background: var(--accent);
 }
 
+.session-badge {
+  background: var(--error);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .session-status {
   width: 8px;
   height: 8px;
