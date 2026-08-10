@@ -41,7 +41,6 @@
           </div>
           <div class="timeline-toolbar hidden">
             <input type="text" id="timeline-search" placeholder="搜索消息..." />
-            <label id="timeline-filter-wrap" class="hidden">Endpoint: <select id="timeline-filter"><option value="all">全部</option></select></label>
             <div class="spacer"></div>
             <button id="btn-clear" title="清空当前会话的消息记录">清空</button>
           </div>
@@ -106,11 +105,18 @@
         <option value="client">客户端</option>
       </select></label>
       <div id="session-server-config">
-        <input type="text" id="session-bind" placeholder="监听地址，如 127.0.0.1:8080" value="127.0.0.1:8080" />
-        <label>Endpoint 路径: <input type="text" id="session-endpoints" placeholder="多个用逗号分隔，如 /echo, /chat；留空则接受所有路径" /></label>
+        <label>监听地址: <input type="text" id="session-bind" placeholder="如 127.0.0.1:8080" value="127.0.0.1:8080" /></label>
       </div>
       <div id="session-client-config" class="hidden">
-        <input type="text" id="session-url" placeholder="目标地址，如 ws://127.0.0.1:8080" value="ws://127.0.0.1:8080" />
+        <label>目标地址: <input type="text" id="session-url" placeholder="如 127.0.0.1:8080（只填地址端口，endpoint 路径在下方配置）" value="127.0.0.1:8080" /></label>
+      </div>
+      <div class="endpoint-list-editor">
+        <div id="endpoint-list-title" class="endpoint-list-title">Endpoint 路径（服务端留空则接受所有路径；客户端会拼接到目标地址后）</div>
+        <div id="endpoint-list" class="endpoint-list"></div>
+        <div class="endpoint-add-row">
+          <input type="text" id="endpoint-input" placeholder="/echo" />
+          <button type="button" id="btn-endpoint-add">添加</button>
+        </div>
       </div>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>取消</button>

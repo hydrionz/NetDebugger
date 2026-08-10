@@ -308,13 +308,23 @@ pub async fn run_ws_client(
     outbound_rx: mpsc::Receiver<OutgoingMessage>,
     shutdown_rx: mpsc::Receiver<()>,
 ) {
-    let url = match config.target_url {
+    let base_url = match config.target_url {
         Some(u) => u,
         None => {
             emit_error(&app, &session_id, "未配置目标地址，无法启动客户端");
             emit_status(&app, &session_id, "error", None, None);
             return;
         }
+    };
+
+    // 客户端配置了 endpoint 时，把第一个路径拼到目标地址后（如 ws://host:port/echo）。
+    let endpoint = config.endpoints.as_ref().and_then(|eps| eps.first()).cloned();
+    let url = match &endpoint {
+        Some(path) => {
+            let trimmed = base_url.trim_end_matches('/');
+            format!("{}{}", trimmed, path)
+        }
+        None => base_url,
     };
 
     db::update_session_status(&db, &session_id, "starting", None, None)
@@ -362,6 +372,7 @@ pub async fn run_ws_client(
         shutdown_rx,
         local_addr,
         remote_addr,
+        endpoint,
     )
     .await;
 }
@@ -376,20 +387,22 @@ async fn run_socket_loop<S>(
     mut shutdown_rx: mpsc::Receiver<()>,
     local_addr: Option<String>,
     remote_addr: String,
+    endpoint: Option<String>,
 ) where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
     let (mut write, mut read) = ws_stream.split();
+    let endpoint_ref = endpoint.as_deref();
 
     loop {
         tokio::select! {
             msg = read.next() => {
                 match msg {
                     Some(Ok(WsMessage::Text(text))) => {
-                        persist_in_message(&db, &session_id, None, "text", text.as_bytes().to_vec(), None, &handle).await;
+                        persist_in_message(&db, &session_id, None, "text", text.as_bytes().to_vec(), endpoint_ref, &handle).await;
                     }
                     Some(Ok(WsMessage::Binary(bin))) => {
-                        persist_in_message(&db, &session_id, None, "binary", bin.to_vec(), None, &handle).await;
+                        persist_in_message(&db, &session_id, None, "binary", bin.to_vec(), endpoint_ref, &handle).await;
                     }
                     Some(Ok(WsMessage::Close(_))) | None => {
                         break;
@@ -406,11 +419,11 @@ async fn run_socket_loop<S>(
             out = outbound_rx.recv() => {
                 let result = match out {
                     Some(OutgoingMessage { endpoint: _, kind: OutgoingKind::Text(text) }) => {
-                        persist_out_message(&db, &session_id, None, "text", text.clone().into_bytes(), None, &handle).await;
+                        persist_out_message(&db, &session_id, None, "text", text.clone().into_bytes(), endpoint_ref, &handle).await;
                         write.send(WsMessage::Text(text.into())).await
                     }
                     Some(OutgoingMessage { endpoint: _, kind: OutgoingKind::Binary(bin) }) => {
-                        persist_out_message(&db, &session_id, None, "binary", bin.clone(), None, &handle).await;
+                        persist_out_message(&db, &session_id, None, "binary", bin.clone(), endpoint_ref, &handle).await;
                         write.send(WsMessage::Binary(bin.into())).await
                     }
                     None => break,
@@ -568,7 +581,7 @@ fn friendly_connect_error(e: &tokio_tungstenite::tungstenite::Error) -> String {
     if lower.contains("timed out") {
         return format!("{}（可能原因：目标不可达或防火墙拦截）", msg);
     }
-    if lower.contains("no endpoint") {
+    if lower.contains("404") || lower.contains("no endpoint") {
         return "服务端拒绝了该路径（endpoint 未配置或不存在）".to_string();
     }
     msg

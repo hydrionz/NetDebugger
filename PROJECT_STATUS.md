@@ -25,25 +25,25 @@
 
 ```
 E:\000develop\learnProject\ai\demo\serverable
-├── CLAUDE.md                 # 项目开发规则
-├── TASKS.md                  # 路线图与待办（历史版本）
-├── PROJECT_STATUS.md         # 本文档：项目状态归档
+├── AGENTS.md                # 通用开发规则（任何 agent 必读）
+├── TASKS.md                 # 路线图与待办（历史版本）
+├── PROJECT_STATUS.md        # 本文档：项目状态归档
 ├── src-tauri/
-│   ├── Cargo.toml            # Rust 依赖与 Tauri 特性配置
-│   ├── tauri.conf.json       # Tauri 应用配置（窗口、CSP、图标等）
-│   ├── icons/                # 应用图标资源
-│   ├── migrations/           # SQLite 数据库迁移脚本
+│   ├── Cargo.toml           # Rust 依赖与 Tauri 特性配置
+│   ├── tauri.conf.json      # Tauri 应用配置（窗口、CSP、图标等）
+│   ├── icons/               # 应用图标资源
+│   ├── migrations/          # SQLite 数据库迁移脚本
 │   └── src/
-│       ├── main.rs           # 入口
-│       ├── lib.rs            # Tauri Builder、托盘、关闭事件、命令注册
-│       ├── commands.rs       # 所有 Tauri 命令（业务 + 设置）
-│       ├── db.rs             # 数据库访问层
-│       ├── state.rs          # 应用状态、SessionHandle、TimelineEvent
-│       └── ws.rs             # WebSocket Server/Client 实现
+│       ├── main.rs          # 入口
+│       ├── lib.rs           # Tauri Builder、托盘、关闭事件、命令注册
+│       ├── commands.rs      # 所有 Tauri 命令（业务 + 设置）
+│       ├── db.rs            # 数据库访问层
+│       ├── state.rs         # 应用状态、SessionHandle、TimelineEvent
+│       └── ws.rs            # WebSocket Server/Client 实现
 └── ui/
-    ├── index.html            # 主界面与设置页结构
-    ├── app.js                # 前端逻辑
-    └── styles.css            # 主题样式（浅色/深色/跟随系统）
+    ├── index.html           # 主界面与设置页结构
+    ├── app.js               # 前端逻辑
+    └── styles.css           # 主题样式（浅色/深色/跟随系统）
 ```
 
 ---
@@ -141,6 +141,10 @@ E:\000develop\learnProject\ai\demo\serverable
 - [x] “清空”按钮应该放置在聊天窗口的右上角，表明可清空当前聊天窗口的历史记录，而不是现在放在整个页面的右上角
 - [x] 端口占用时给 UI 友好提示
 - [x] 消息过滤 / 搜索
+- [ ] 连接创建后，连接协议不允许修改
+- [x] websocket服务端的endpoint路径，不要使用文本框让用户输入路径用逗号分隔，改为动态列表，用户可以点击添加/删除按钮操作endpoint路径列表
+- [x] 客户端协议配置页应该有endpoint路径的配置
+- [x] endpoint路径不要在聊天窗口左上角进行筛选了，改为在左侧连接列表中，每个endpoint路径作为连接的子节点展示，当该endpoint收到消息后显示未读消息数量角标，点击该endpoint路径聊天窗口中只查看该endpoint的消息，连接的角标数量为所有未读endpoint角标数量之和
 
 ### 中优先级
 
@@ -160,14 +164,11 @@ E:\000develop\learnProject\ai\demo\serverable
 
 ## 7. 开发规则
 
-> 详见 `CLAUDE.md`，核心规则如下：
+> 详见 `AGENTS.md`（任何 agent 的通用开发规则），核心规则如下：
 
 1. **提交规则**：完成功能后，**先不要提交**到 Git。必须等用户验证完成并明确说“提交”或“提交到 Git”时，再执行提交操作。
-2. **验证规则**：每完成一个功能后，助手应先自行测试验证：
-   - 检查相关代码是否能正常编译/运行。
-   - 验证功能是否按预期工作。
-   - 确认没有引入明显的问题或回归。
-3. 自测没问题后，再向用户报告功能已完成，请用户验证。
+2. **开发与审核规则**：开发过程中持续做好代码审核——确保编译通过、无新增警告，代码简洁明了、逻辑正确，遵循现有风格；写完做一次自查（编译通过 + 逻辑走查）。
+3. **验证规则**：开发完成后**不需要 agent 做任何测试验证操作**（包括冒烟测试、E2E、UI 自动化、浏览器/CDP 验证、协议连通性测试等），直接向用户报告功能已完成，由用户自行测试验证；用户反馈问题后再修改。
 
 ---
 

@@ -353,6 +353,46 @@ button.primary:hover {
   padding-left: 16px;
 }
 
+.endpoint-tree {
+  padding-left: 26px;
+  display: flex;
+  flex-direction: column;
+}
+
+.endpoint-item-tree {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.endpoint-item-tree:hover {
+  background: var(--surface-hover);
+}
+
+.endpoint-item-tree.selected {
+  background: var(--selected-bg);
+  color: var(--selected-text);
+}
+
+.endpoint-item-tree .session-badge {
+  font-size: 9px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 8px;
+}
+
+.endpoint-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .session-item {
   display: flex;
   align-items: center;
@@ -360,6 +400,23 @@ button.primary:hover {
   padding: 4px 6px;
   border-radius: 3px;
   cursor: pointer;
+}
+
+.session-expander {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.session-expander:hover {
+  color: var(--text);
 }
 
 .session-item:hover {
@@ -881,6 +938,67 @@ dialog select {
 #dlg-prompt-input {
   font-size: 13px;
   padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.endpoint-list-editor {
+  margin-top: 4px;
+}
+
+.endpoint-list-title {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.endpoint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.endpoint-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.endpoint-item .endpoint-path {
+  flex: 1;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.endpoint-remove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+
+.endpoint-remove:hover {
+  color: var(--error);
+}
+
+.endpoint-add-row {
+  display: flex;
+  gap: 6px;
+}
+
+.endpoint-add-row input {
+  flex: 1;
+  font-size: 12px;
+  padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--bg);

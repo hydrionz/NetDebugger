@@ -11,8 +11,10 @@ const state = {
   selectedClientId: null,
   unreadCounts: new Map(),
   endpointFilter: new Map(),
+  collapsedSessions: new Set(),
   searchQuery: '',
   autoScroll: true,
+  endpointDraft: [],
 };
 
 const els = {
@@ -43,9 +45,10 @@ const els = {
   sessionClientConfig: document.getElementById('session-client-config'),
   sessionBind: document.getElementById('session-bind'),
   sessionUrl: document.getElementById('session-url'),
-  sessionEndpoints: document.getElementById('session-endpoints'),
-  timelineFilter: document.getElementById('timeline-filter'),
-  timelineFilterWrap: document.getElementById('timeline-filter-wrap'),
+  endpointList: document.getElementById('endpoint-list'),
+  endpointListTitle: document.getElementById('endpoint-list-title'),
+  endpointInput: document.getElementById('endpoint-input'),
+  btnEndpointAdd: document.getElementById('btn-endpoint-add'),
   timelineSearch: document.getElementById('timeline-search'),
   settingsView: document.getElementById('settings-view'),
   settingMinimizeToTray: document.getElementById('setting-minimize-to-tray'),
@@ -145,6 +148,12 @@ function renderProjectTree() {
     list.className = 'session-list';
 
     for (const s of p.sessions) {
+      // endpoint 子节点集合（配置的 + 已加载消息中出现的）
+      const eps = new Set(s.endpoints || []);
+      for (const m of state.messages.get(s.id) || []) if (m.endpoint) eps.add(m.endpoint);
+      const hasEps = eps.size > 0;
+      const collapsed = state.collapsedSessions.has(s.id);
+
       const item = document.createElement('div');
       item.className = 'session-item' + (s.id === state.selectedSessionId ? ' selected' : '');
       item.dataset.id = s.id;
@@ -165,12 +174,19 @@ function renderProjectTree() {
       const toggleIcon = isRunning ? '⏹' : '▶';
       const toggleTitle = isRunning ? '停止' : '启动';
 
-      const unreadCount = state.unreadCounts.get(s.id) || 0;
-      const badge = unreadCount > 0
-        ? `<span class="session-badge">${unreadCount > 99 ? '99+' : unreadCount}</span>`
+      // 未读角标按 endpoint 分桶；连接的角标为各 endpoint 之和。
+      const epUnread = state.unreadCounts.get(s.id) || new Map();
+      const sessionUnread = [...epUnread.values()].reduce((a, b) => a + b, 0);
+      const badge = sessionUnread > 0
+        ? `<span class="session-badge">${sessionUnread > 99 ? '99+' : sessionUnread}</span>`
+        : '';
+
+      const expander = hasEps
+        ? `<span class="session-expander" title="${collapsed ? '展开' : '折叠'}">${collapsed ? '▶' : '▼'}</span>`
         : '';
 
       item.innerHTML = `
+        ${expander}
         <span class="session-type ${s.status}">${escapeHtml(typeLabel)}</span>
         <span class="session-name">${escapeHtml(displayName)}</span>
         ${badge}
@@ -182,9 +198,33 @@ function renderProjectTree() {
       `;
       item.addEventListener('click', (ev) => {
         if (ev.target.closest('button')) return;
+        if (ev.target.closest('.session-expander')) {
+          toggleSessionCollapse(s.id);
+          return;
+        }
         selectSession(s.id);
       });
       list.appendChild(item);
+
+      // endpoint 子节点：每个 endpoint 一行，带自己的未读角标；点击只看该 endpoint。
+      if (hasEps && !collapsed) {
+        const epList = document.createElement('div');
+        epList.className = 'endpoint-tree';
+        for (const ep of eps) {
+          const epItem = document.createElement('div');
+          const isEpSelected = state.selectedSessionId === s.id && state.endpointFilter.get(s.id) === ep;
+          epItem.className = 'endpoint-item-tree' + (isEpSelected ? ' selected' : '');
+          const epBadge = (epUnread.get(ep) || 0) > 0
+            ? `<span class="session-badge">${(epUnread.get(ep) || 0) > 99 ? '99+' : (epUnread.get(ep) || 0)}</span>`
+            : '';
+          epItem.innerHTML = `<span class="endpoint-path">${escapeHtml(ep)}</span>${epBadge}`;
+          epItem.addEventListener('click', () => {
+            selectSession(s.id, ep);
+          });
+          epList.appendChild(epItem);
+        }
+        list.appendChild(epList);
+      }
     }
 
     group.appendChild(header);
@@ -258,9 +298,12 @@ function openSessionDialog(projectId) {
   els.sessionName.value = '';
   els.sessionProject.value = projectId || '';
   els.sessionRole.value = 'server';
+  els.sessionProtocol.disabled = false;
   els.sessionBind.value = '127.0.0.1:8080';
-  els.sessionUrl.value = 'ws://127.0.0.1:8080';
-  els.sessionEndpoints.value = '';
+  els.sessionUrl.value = '127.0.0.1:8080';
+  state.endpointDraft = [];
+  updateEndpointListTitle();
+  renderEndpointList();
   els.sessionServerConfig.classList.remove('hidden');
   els.sessionClientConfig.classList.add('hidden');
   els.dlgSession.showModal();
@@ -272,19 +315,60 @@ function openEditSessionDialog(session) {
   els.sessionName.value = session.name || '';
   els.sessionProject.value = session.project_id || '';
   els.sessionRole.value = session.role;
-  els.sessionEndpoints.value = (session.endpoints || []).join(', ');
+  // 连接创建后协议不允许修改
+  els.sessionProtocol.disabled = true;
+  state.endpointDraft = (session.endpoints || []).slice();
+  updateEndpointListTitle();
+  renderEndpointList();
   if (session.role === 'server') {
     els.sessionBind.value = session.bind_addr || '';
-    els.sessionUrl.value = 'ws://127.0.0.1:8080';
+    els.sessionUrl.value = '127.0.0.1:8080';
     els.sessionServerConfig.classList.remove('hidden');
     els.sessionClientConfig.classList.add('hidden');
   } else {
     els.sessionBind.value = '127.0.0.1:8080';
-    els.sessionUrl.value = session.target_url || '';
+    // 目标地址回显：去掉 ws:// 前缀，只显示 host:port（若历史数据带前缀则剥掉）
+    els.sessionUrl.value = stripWsPrefix(session.target_url || '');
     els.sessionServerConfig.classList.add('hidden');
     els.sessionClientConfig.classList.remove('hidden');
   }
   els.dlgSession.showModal();
+}
+
+// 剥掉 ws:// 或 wss:// 前缀，只留 host:port 部分
+function stripWsPrefix(url) {
+  const m = /^(wss?:\/\/)?(.*)$/.exec(url);
+  return m ? m[2] : url;
+}
+
+// 根据角色更新 endpoint 列表标题文案
+function updateEndpointListTitle() {
+  els.endpointListTitle.textContent = els.sessionRole.value === 'server'
+    ? 'Endpoint 路径（留空则接受所有路径）'
+    : 'Endpoint 路径（可添加多个；连接时使用第一个，拼接到目标地址后）';
+}
+
+function renderEndpointList() {
+  els.endpointList.innerHTML = '';
+  for (const ep of state.endpointDraft) {
+    const row = document.createElement('div');
+    row.className = 'endpoint-item';
+    row.innerHTML = `<span class="endpoint-path">${escapeHtml(ep)}</span><button type="button" class="endpoint-remove" title="删除">×</button>`;
+    row.querySelector('.endpoint-remove').addEventListener('click', () => {
+      state.endpointDraft = state.endpointDraft.filter((x) => x !== ep);
+      renderEndpointList();
+    });
+    els.endpointList.appendChild(row);
+  }
+}
+
+function addEndpointFromInput() {
+  const val = els.endpointInput.value.trim();
+  if (!val) return;
+  if (state.endpointDraft.includes(val)) return;
+  state.endpointDraft.push(val);
+  els.endpointInput.value = '';
+  renderEndpointList();
 }
 
 async function createProject() {
@@ -317,19 +401,18 @@ async function saveSession() {
   const editId = els.editSessionId.value.trim();
   const projectId = els.sessionProject.value.trim();
   const name = els.sessionName.value.trim();
-  const raw = els.sessionEndpoints.value;
-  let endpoints = null;
-  if (els.sessionRole.value === 'server') {
-    const list = raw.split(/[,，]/).map(s => s.trim()).filter(Boolean);
-    endpoints = list.length ? list : null;
-  }
+  const endpoints = state.endpointDraft.length ? state.endpointDraft.slice() : null;
+  const isServer = els.sessionRole.value === 'server';
+  const targetUrl = isServer
+    ? null
+    : ensureWsScheme(els.sessionUrl.value.trim());
   const req = {
     project_id: projectId || null,
     name: name || null,
     protocol: els.sessionProtocol.value,
     role: els.sessionRole.value,
-    bind_addr: els.sessionRole.value === 'server' ? els.sessionBind.value.trim() || null : null,
-    target_url: els.sessionRole.value === 'client' ? els.sessionUrl.value.trim() || null : null,
+    bind_addr: isServer ? els.sessionBind.value.trim() || null : null,
+    target_url: targetUrl || null,
     endpoints,
   };
   try {
@@ -343,6 +426,12 @@ async function saveSession() {
   } catch (e) {
     showError(editId ? '修改连接失败: ' + e : '创建连接失败: ' + e);
   }
+}
+
+// 目标地址若未带协议前缀则补 ws://
+function ensureWsScheme(url) {
+  if (!url) return url;
+  return /^wss?:\/\//.test(url) ? url : 'ws://' + url;
 }
 
 async function deleteSession(id) {
@@ -375,23 +464,36 @@ async function stopSession(id) {
   }
 }
 
-async function selectSession(id) {
+function toggleSessionCollapse(id) {
+  if (state.collapsedSessions.has(id)) {
+    state.collapsedSessions.delete(id);
+  } else {
+    state.collapsedSessions.add(id);
+  }
+  renderProjectTree();
+}
+
+async function selectSession(id, endpoint) {
   state.selectedSessionId = id;
   state.selectedMessageId = null;
   state.selectedClientId = null;
   state.messages.set(id, []);
   state.clients.set(id, []);
-  state.endpointFilter.set(id, 'all');
+  state.endpointFilter.set(id, endpoint || 'all');
   state.searchQuery = '';
   state.autoScroll = true;
   if (els.timelineSearch) els.timelineSearch.value = '';
-  // 清空当前选中会话的未读角标
+  // 清空当前选中会话（或该 endpoint）的未读角标
   if (id) {
-    state.unreadCounts.delete(id);
-    renderProjectTree();
+    if (endpoint) {
+      const m = state.unreadCounts.get(id);
+      if (m) { m.delete(endpoint); renderProjectTree(); }
+    } else {
+      state.unreadCounts.delete(id);
+      renderProjectTree();
+    }
   }
   updateContentArea();
-  populateTimelineFilter(id);
   renderTimeline();
   renderDetail();
   renderClientList();
@@ -459,27 +561,16 @@ function appendMessage(sessionId, msg) {
   renderTimeline();
 }
 
-function incrementUnread(sessionId) {
-  if (state.selectedSessionId === sessionId) return;
-  const current = state.unreadCounts.get(sessionId) || 0;
-  state.unreadCounts.set(sessionId, current + 1);
-  renderProjectTree();
-}
-
-function populateTimelineFilter(sessionId) {
-  const s = findSession(sessionId);
-  els.timelineFilter.innerHTML = '<option value="all">全部</option>';
-  const eps = new Set((s && s.endpoints) || []);
-  for (const m of state.messages.get(sessionId) || []) if (m.endpoint) eps.add(m.endpoint);
-  for (const e of eps) {
-    const opt = document.createElement('option');
-    opt.value = e; opt.textContent = e;
-    els.timelineFilter.appendChild(opt);
+function incrementUnread(sessionId, endpoint) {
+  // 当前选中的会话（且未按 endpoint 筛选或正好筛的是该 endpoint）不累计未读
+  if (state.selectedSessionId === sessionId) {
+    const cur = state.endpointFilter.get(sessionId) || 'all';
+    if (cur === 'all' || cur === endpoint) return;
   }
-  const toolbar = els.timelineFilter.closest('.timeline-toolbar');
-  if (toolbar) toolbar.classList.toggle('hidden', !sessionId);
-  // Endpoint 筛选仅在 server 会话且存在 endpoint 时显示；搜索和清空始终可用。
-  els.timelineFilterWrap.classList.toggle('hidden', !(s && s.role === 'server') || eps.size === 0);
+  let map = state.unreadCounts.get(sessionId);
+  if (!map) { map = new Map(); state.unreadCounts.set(sessionId, map); }
+  map.set(endpoint || '', (map.get(endpoint || '') || 0) + 1);
+  renderProjectTree();
 }
 
 function renderTimeline() {
@@ -487,9 +578,13 @@ function renderTimeline() {
   const id = state.selectedSessionId;
   if (!id) {
     els.timeline.classList.add('empty');
+    const toolbar = document.querySelector('.timeline-toolbar');
+    if (toolbar) toolbar.classList.add('hidden');
     return;
   }
   els.timeline.classList.remove('empty');
+  const toolbar = document.querySelector('.timeline-toolbar');
+  if (toolbar) toolbar.classList.remove('hidden');
 
   let msgs = state.messages.get(id) || [];
   const filter = state.endpointFilter.get(id) || 'all';
@@ -728,6 +823,8 @@ async function clearMessages() {
   try {
     await invoke('clear_messages', { sessionId: id });
     state.messages.set(id, []);
+    state.unreadCounts.delete(id);
+    renderProjectTree();
     renderTimeline();
     renderDetail();
   } catch (e) {
@@ -756,6 +853,7 @@ document.getElementById('btn-session-ok').addEventListener('click', (ev) => {
 });
 
 els.sessionRole.addEventListener('change', () => {
+  updateEndpointListTitle();
   if (els.sessionRole.value === 'server') {
     els.sessionServerConfig.classList.remove('hidden');
     els.sessionClientConfig.classList.add('hidden');
@@ -773,11 +871,12 @@ els.sendInput.addEventListener('keydown', (ev) => {
   }
 });
 
-els.timelineFilter.addEventListener('change', () => {
-  const id = state.selectedSessionId;
-  if (!id) return;
-  state.endpointFilter.set(id, els.timelineFilter.value);
-  renderTimeline();
+els.btnEndpointAdd.addEventListener('click', addEndpointFromInput);
+els.endpointInput.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    addEndpointFromInput();
+  }
 });
 
 els.timelineSearch.addEventListener('input', () => {
@@ -851,10 +950,10 @@ listen('session:error', (ev) => {
 }).catch((e) => console.error('listen session:error failed', e));
 
 listen('session:message', (ev) => {
-  // 全局消息事件，用于非选中会话的未读角标计数
+  // 全局消息事件，用于非选中会话（或未命中当前 endpoint 筛选）的未读角标计数
   const data = ev.payload.data || ev.payload;
   if (data && data.session_id) {
-    incrementUnread(data.session_id);
+    incrementUnread(data.session_id, data.endpoint || null);
   }
 }).catch((e) => console.error('listen session:message failed', e));
 
