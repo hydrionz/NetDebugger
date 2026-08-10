@@ -169,6 +169,27 @@
     </form>
   </dialog>
 
+  <dialog id="dlg-confirm" class="app-dialog">
+    <div class="app-dialog-body">
+      <div id="dlg-confirm-message" class="app-dialog-message"></div>
+      <div class="dialog-actions">
+        <button value="cancel" id="btn-confirm-cancel">取消</button>
+        <button value="ok" id="btn-confirm-ok" class="primary">确定</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-prompt" class="app-dialog">
+    <div class="app-dialog-body">
+      <div id="dlg-prompt-message" class="app-dialog-message"></div>
+      <input type="text" id="dlg-prompt-input" />
+      <div class="dialog-actions">
+        <button value="cancel" id="btn-prompt-cancel">取消</button>
+        <button value="ok" id="btn-prompt-ok" class="primary">确定</button>
+      </div>
+    </div>
+  </dialog>
+
   <div id="toast-container" class="toast-container hidden"></div>
 
   <script src="app.js"></script>

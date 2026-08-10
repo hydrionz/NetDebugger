@@ -295,13 +295,13 @@ async function createProject() {
     els.projectName.value = '';
     await loadProjects();
   } catch (e) {
-    alert('创建分组失败: ' + e);
+    showError('创建分组失败: ' + e);
   }
 }
 
 async function deleteProject(id) {
   if (id === '_ungrouped') return;
-  if (!confirm('确定删除该分组及其所有会话和消息？')) return;
+  if (!await showConfirm('确定删除该分组及其所有会话和消息？')) return;
   try {
     await invoke('delete_project', { id });
     if (state.selectedSessionId && !findSession(state.selectedSessionId)) {
@@ -309,7 +309,7 @@ async function deleteProject(id) {
     }
     await loadProjects();
   } catch (e) {
-    alert('删除分组失败: ' + e);
+    showError('删除分组失败: ' + e);
   }
 }
 
@@ -341,19 +341,19 @@ async function saveSession() {
     await loadProjects();
     els.dlgSession.close();
   } catch (e) {
-    alert(editId ? '修改连接失败: ' + e : '创建连接失败: ' + e);
+    showError(editId ? '修改连接失败: ' + e : '创建连接失败: ' + e);
   }
 }
 
 async function deleteSession(id) {
-  if (!confirm('确定删除该连接及其消息？')) return;
+  if (!await showConfirm('确定删除该连接及其消息？')) return;
   try {
     await invoke('delete_session', { id });
     state.unreadCounts.delete(id);
     if (state.selectedSessionId === id) selectSession(null);
     await loadProjects();
   } catch (e) {
-    alert('删除连接失败: ' + e);
+    showError('删除连接失败: ' + e);
   }
 }
 
@@ -362,7 +362,7 @@ async function startSession(id) {
     await invoke('start_session', { id });
     await loadProjects();
   } catch (e) {
-    alert('启动失败: ' + e);
+    showError('启动失败: ' + e);
   }
 }
 
@@ -371,7 +371,7 @@ async function stopSession(id) {
     await invoke('stop_session', { id });
     await loadProjects();
   } catch (e) {
-    alert('停止失败: ' + e);
+    showError('停止失败: ' + e);
   }
 }
 
@@ -666,7 +666,7 @@ function renderClientList() {
     });
     chip.querySelector('.rename-hint').addEventListener('click', async (ev) => {
       ev.stopPropagation();
-      const newName = prompt('重命名客户端（留空清除）', c.name || '');
+      const newName = await showPrompt('重命名客户端（留空清除）', c.name || '');
       if (newName === null) return;
       const trimmed = newName.trim();
       try {
@@ -675,16 +675,16 @@ function renderClientList() {
         renderClientList();
         updateSendArea();
       } catch (e) {
-        alert('重命名失败: ' + e);
+        showError('重命名失败: ' + e);
       }
     });
     chip.querySelector('.disconnect-hint').addEventListener('click', async (ev) => {
       ev.stopPropagation();
-      if (!confirm('确定断开此客户端连接？')) return;
+      if (!await showConfirm('确定断开此客户端连接？')) return;
       try {
         await invoke('disconnect_client', { sessionId: id, clientId: c.id });
       } catch (e) {
-        alert('断开失败: ' + e);
+        showError('断开失败: ' + e);
       }
     });
     els.clientList.appendChild(chip);
@@ -717,21 +717,21 @@ async function sendMessage() {
     });
     els.sendInput.value = '';
   } catch (e) {
-    alert('发送失败: ' + e);
+    showError('发送失败: ' + e);
   }
 }
 
 async function clearMessages() {
   const id = state.selectedSessionId;
   if (!id) return;
-  if (!confirm('确定清空当前会话的消息记录？')) return;
+  if (!await showConfirm('确定清空当前会话的消息记录？')) return;
   try {
     await invoke('clear_messages', { sessionId: id });
     state.messages.set(id, []);
     renderTimeline();
     renderDetail();
   } catch (e) {
-    alert('清空失败: ' + e);
+    showError('清空失败: ' + e);
   }
 }
 
@@ -936,7 +936,7 @@ async function saveSettings() {
     savedTheme = theme;
     closeSettingsView();
   } catch (e) {
-    alert('保存设置失败: ' + e);
+    showError('保存设置失败: ' + e);
   }
 }
 
@@ -951,7 +951,7 @@ async function confirmClose() {
       await invoke('exit_app');
     }
   } catch (e) {
-    alert('关闭失败: ' + e);
+    showError('关闭失败: ' + e);
   }
 }
 
@@ -970,6 +970,65 @@ function showErrorToast(message) {
       if (container.children.length === 0) container.classList.add('hidden');
     }, 300);
   }, 5000);
+}
+
+// 错误提示统一走 toast，替代浏览器默认 alert。
+function showError(message) {
+  showErrorToast(String(message));
+}
+
+// 自定义确认对话框，替代浏览器默认 confirm。resolve(true/false)。
+function showConfirm(message) {
+  const dlg = document.getElementById('dlg-confirm');
+  const msgEl = document.getElementById('dlg-confirm-message');
+  msgEl.textContent = message;
+  return new Promise((resolve) => {
+    const ok = document.getElementById('btn-confirm-ok');
+    const cancel = document.getElementById('btn-confirm-cancel');
+    const done = (val) => {
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      dlg.close();
+      resolve(val);
+    };
+    const onOk = () => done(true);
+    const onCancel = () => done(false);
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    dlg.showModal();
+  });
+}
+
+// 自定义输入对话框，替代浏览器默认 prompt。resolve(输入值)；取消 resolve(null)。
+function showPrompt(message, initialValue) {
+  const dlg = document.getElementById('dlg-prompt');
+  const msgEl = document.getElementById('dlg-prompt-message');
+  const inputEl = document.getElementById('dlg-prompt-input');
+  msgEl.textContent = message;
+  inputEl.value = initialValue || '';
+  return new Promise((resolve) => {
+    const ok = document.getElementById('btn-prompt-ok');
+    const cancel = document.getElementById('btn-prompt-cancel');
+    const done = (val) => {
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      inputEl.removeEventListener('keydown', onKey);
+      dlg.close();
+      resolve(val);
+    };
+    const onOk = () => done(inputEl.value);
+    const onCancel = () => done(null);
+    const onKey = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); done(inputEl.value); }
+      if (e.key === 'Escape') { e.preventDefault(); done(null); }
+    };
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    inputEl.addEventListener('keydown', onKey);
+    dlg.showModal();
+    inputEl.focus();
+    inputEl.select();
+  });
 }
 
 // 禁用浏览器默认右键菜单
