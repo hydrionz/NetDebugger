@@ -32,6 +32,7 @@ pub async fn run_ws_server(
         None => {
             emit_error(&app, &session_id, "未配置监听地址，无法启动服务端");
             emit_status(&app, &session_id, "error", None, None);
+            remove_session_handle(&app, &session_id).await;
             return;
         }
     };
@@ -42,6 +43,7 @@ pub async fn run_ws_server(
             eprintln!("ws server bind error: {}", e);
             emit_error(&app, &session_id, &format!("监听 {} 失败：端口可能被占用（{}）", bind_addr, e));
             emit_status(&app, &session_id, "error", None, None);
+            remove_session_handle(&app, &session_id).await;
             return;
         }
     };
@@ -313,6 +315,7 @@ pub async fn run_ws_client(
         None => {
             emit_error(&app, &session_id, "未配置目标地址，无法启动客户端");
             emit_status(&app, &session_id, "error", None, None);
+            remove_session_handle(&app, &session_id).await;
             return;
         }
     };
@@ -338,6 +341,7 @@ pub async fn run_ws_client(
             eprintln!("ws client connect error: {}", e);
             emit_error(&app, &session_id, &format!("连接 {} 失败：{}", url, friendly_connect_error(&e)));
             set_closed(&app, &db, &session_id, None, None).await;
+            remove_session_handle(&app, &session_id).await;
             return;
         }
     };
@@ -571,9 +575,16 @@ fn emit_error(app: &AppHandle, session_id: &str, message: &str) {
     );
 }
 
+/// 任务提前退出（启动失败等）时，从 state.sessions 移除自己的 handle，
+/// 否则该会话会被认为仍在运行，无法再次启动。
+async fn remove_session_handle(app: &AppHandle, session_id: &str) {
+    let state = app.state::<crate::state::AppState>();
+    let mut sessions = state.sessions.write().await;
+    sessions.remove(session_id);
+}
+
 /// 把常见的连接错误转成更友好的中文提示（补充端口被占用/拒绝/超时的可能原因）。
-fn friendly_connect_error(e: &tokio_tungstenite::tungstenite::Error) -> String {
-    let msg = e.to_string();
+fn friendly_connect_error(e: &tokio_tungstenite::tungstenite::Error) -> String {    let msg = e.to_string();
     let lower = msg.to_lowercase();
     if lower.contains("refused") {
         return format!("{}（可能原因：服务端未启动或端口错误）", msg);
