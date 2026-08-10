@@ -950,9 +950,10 @@ listen('session:error', (ev) => {
 }).catch((e) => console.error('listen session:error failed', e));
 
 listen('session:message', (ev) => {
-  // 全局消息事件，用于非选中会话（或未命中当前 endpoint 筛选）的未读角标计数
+  // 全局消息事件，用于非选中会话（或未命中当前 endpoint 筛选）的未读角标计数。
+  // 只统计收到的消息（in）；自己发出的消息（out）不计入未读。
   const data = ev.payload.data || ev.payload;
-  if (data && data.session_id) {
+  if (data && data.session_id && data.direction === 'in') {
     incrementUnread(data.session_id, data.endpoint || null);
   }
 }).catch((e) => console.error('listen session:message failed', e));
