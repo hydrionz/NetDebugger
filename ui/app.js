@@ -42,7 +42,7 @@ const els = {
   sessionUrl: document.getElementById('session-url'),
   settingsView: document.getElementById('settings-view'),
   settingMinimizeToTray: document.getElementById('setting-minimize-to-tray'),
-  settingDarkTheme: document.getElementById('setting-dark-theme'),
+  themeRadios: document.querySelectorAll('input[name="theme"]'),
   dlgCloseConfirm: document.getElementById('dlg-close-confirm'),
   closeConfirmMinimizeToTray: document.getElementById('close-confirm-minimize-to-tray'),
 };
@@ -707,6 +707,12 @@ document.getElementById('btn-settings-close').addEventListener('click', (ev) => 
   closeSettingsView();
 });
 
+for (const radio of els.themeRadios) {
+  radio.addEventListener('change', () => {
+    applyTheme(getSelectedTheme());
+  });
+}
+
 document.getElementById('btn-close-confirm-ok').addEventListener('click', (ev) => {
   ev.preventDefault();
   confirmClose();
@@ -772,24 +778,55 @@ listen('window:close-requested', () => {
   els.dlgCloseConfirm.showModal();
 }).catch((e) => console.error('listen window:close-requested failed', e));
 
+let savedTheme = 'system';
+
+function applyTheme(theme) {
+  if (theme === 'system') {
+    document.documentElement.removeAttribute('data-theme');
+  } else {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+}
+
+function getSelectedTheme() {
+  for (const radio of els.themeRadios) {
+    if (radio.checked) return radio.value;
+  }
+  return 'system';
+}
+
+function setSelectedTheme(theme) {
+  for (const radio of els.themeRadios) {
+    radio.checked = radio.value === theme;
+  }
+}
+
 async function openSettingsView() {
   try {
-    const value = await invoke('get_minimize_to_tray');
-    els.settingMinimizeToTray.checked = value;
+    const minimize = await invoke('get_minimize_to_tray');
+    const theme = await invoke('get_theme');
+    els.settingMinimizeToTray.checked = minimize;
+    savedTheme = theme;
+    setSelectedTheme(theme);
+    applyTheme(theme);
     els.settingsView.classList.remove('hidden');
   } catch (e) {
-    console.error('get_minimize_to_tray failed', e);
+    console.error('openSettingsView failed', e);
   }
 }
 
 function closeSettingsView() {
+  applyTheme(savedTheme);
   els.settingsView.classList.add('hidden');
 }
 
 async function saveSettings() {
-  const value = els.settingMinimizeToTray.checked;
+  const minimize = els.settingMinimizeToTray.checked;
+  const theme = getSelectedTheme();
   try {
-    await invoke('set_minimize_to_tray', { value });
+    await invoke('set_minimize_to_tray', { value: minimize });
+    await invoke('set_theme', { theme });
+    savedTheme = theme;
     closeSettingsView();
   } catch (e) {
     alert('保存设置失败: ' + e);
@@ -814,3 +851,14 @@ async function confirmClose() {
 // Init
 updateContentArea();
 loadProjects();
+
+// Load theme setting on startup.
+(async function initTheme() {
+  try {
+    const theme = await invoke('get_theme');
+    savedTheme = theme;
+    applyTheme(theme);
+  } catch (e) {
+    console.error('initTheme failed', e);
+  }
+})();

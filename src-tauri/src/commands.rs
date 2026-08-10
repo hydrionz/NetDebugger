@@ -338,6 +338,23 @@ pub fn set_minimize_to_tray(app: AppHandle, value: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn get_theme(app: AppHandle) -> Result<String, String> {
+    let store = app.store("store.bin").map_err(|e| e.to_string())?;
+    Ok(store
+        .get("theme")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "system".to_string()))
+}
+
+#[tauri::command]
+pub fn set_theme(app: AppHandle, theme: String) -> Result<(), String> {
+    let store = app.store("store.bin").map_err(|e| e.to_string())?;
+    store.set("theme", json!(theme));
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn hide_window(window: tauri::WebviewWindow) -> Result<(), String> {
     window.hide().map_err(|e| e.to_string())
 }

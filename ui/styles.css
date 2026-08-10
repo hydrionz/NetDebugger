@@ -1,15 +1,79 @@
 :root {
+  --bg: #f7f7f7;
+  --surface: #ffffff;
+  --surface-hover: #f0f0f0;
+  --border: #d0d0d0;
+  --text: #1a1a1a;
+  --text-muted: #555555;
+  --accent: #1e4d8b;
+  --accent-hover: #163d6e;
+  --success: #107c10;
+  --error: #c42b1c;
+  --warning: #9c5f00;
+  --selected-bg: #cfe2f3;
+  --selected-text: #1a1a1a;
+  --primary-bg: #a8d0f0;
+  --primary-text: #1a1a1a;
+  --primary-hover: #8cc2eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1e1e;
+    --surface: #252526;
+    --surface-hover: #2a2d2e;
+    --border: #3e3e42;
+    --text: #cccccc;
+    --text-muted: #858585;
+    --accent: #4a9fd4;
+    --accent-hover: #6ab3e0;
+    --success: #89d185;
+    --error: #f48771;
+    --warning: #dcdcaa;
+    --selected-bg: #3c3c3c;
+    --selected-text: #ffffff;
+    --primary-bg: #4a9fd4;
+    --primary-text: #1a1a1a;
+    --primary-hover: #6ab3e0;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg: #f7f7f7;
+  --surface: #ffffff;
+  --surface-hover: #f0f0f0;
+  --border: #d0d0d0;
+  --text: #1a1a1a;
+  --text-muted: #555555;
+  --accent: #1e4d8b;
+  --accent-hover: #163d6e;
+  --success: #107c10;
+  --error: #c42b1c;
+  --warning: #9c5f00;
+  --selected-bg: #cfe2f3;
+  --selected-text: #1a1a1a;
+  --primary-bg: #a8d0f0;
+  --primary-text: #1a1a1a;
+  --primary-hover: #8cc2eb;
+}
+
+:root[data-theme="dark"] {
   --bg: #1e1e1e;
   --surface: #252526;
   --surface-hover: #2a2d2e;
   --border: #3e3e42;
   --text: #cccccc;
   --text-muted: #858585;
-  --accent: #0e639c;
-  --accent-hover: #1177bb;
+  --accent: #4a9fd4;
+  --accent-hover: #6ab3e0;
   --success: #89d185;
   --error: #f48771;
   --warning: #dcdcaa;
+  --selected-bg: #3c3c3c;
+  --selected-text: #ffffff;
+  --primary-bg: #4a9fd4;
+  --primary-text: #1a1a1a;
+  --primary-hover: #6ab3e0;
 }
 
 * {
@@ -51,12 +115,14 @@ button:disabled {
 }
 
 button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--primary-bg);
+  border-color: var(--primary-bg);
+  color: var(--primary-text);
 }
 
 button.primary:hover {
-  background: var(--accent-hover);
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
 }
 
 #app {
@@ -302,7 +368,8 @@ button.primary:hover {
 }
 
 .session-item.selected {
-  background: var(--accent);
+  background: var(--selected-bg);
+  color: var(--selected-text);
 }
 
 .session-badge {
@@ -358,25 +425,55 @@ button.primary:hover {
   letter-spacing: 0.3px;
 }
 
+:root {
+  --success-soft: rgba(16, 124, 16, 0.12);
+  --warning-soft: rgba(156, 95, 0, 0.12);
+  --error-soft: rgba(196, 43, 28, 0.12);
+  --muted-soft: rgba(74, 74, 74, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --success-soft: rgba(137, 209, 133, 0.12);
+    --warning-soft: rgba(220, 220, 170, 0.12);
+    --error-soft: rgba(244, 135, 113, 0.12);
+    --muted-soft: rgba(133, 133, 133, 0.12);
+  }
+}
+
+:root[data-theme="light"] {
+  --success-soft: rgba(16, 124, 16, 0.12);
+  --warning-soft: rgba(156, 95, 0, 0.12);
+  --error-soft: rgba(196, 43, 28, 0.12);
+  --muted-soft: rgba(74, 74, 74, 0.12);
+}
+
+:root[data-theme="dark"] {
+  --success-soft: rgba(137, 209, 133, 0.12);
+  --warning-soft: rgba(220, 220, 170, 0.12);
+  --error-soft: rgba(244, 135, 113, 0.12);
+  --muted-soft: rgba(133, 133, 133, 0.12);
+}
+
 .session-type.running {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
+  color: var(--success);
+  background: var(--success-soft);
 }
 
 .session-type.starting {
-  color: #facc15;
-  background: rgba(250, 204, 21, 0.12);
+  color: var(--warning);
+  background: var(--warning-soft);
 }
 
 .session-type.error {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.12);
+  color: var(--error);
+  background: var(--error-soft);
 }
 
 .session-type.idle,
 .session-type.closed {
-  color: #9ca3af;
-  background: rgba(156, 163, 175, 0.12);
+  color: var(--text-muted);
+  background: var(--muted-soft);
 }
 
 .session-name {
@@ -504,6 +601,29 @@ dialog select {
   margin: 0;
 }
 
+.radio-group {
+  margin-top: 16px;
+}
+
+.radio-group-label {
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+
+.radio-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.radio-label input[type="radio"] {
+  width: auto;
+  margin: 0;
+}
+
 .settings-view {
   position: fixed;
   top: 0;
@@ -535,8 +655,8 @@ dialog select {
 }
 
 .settings-category.active {
-  color: var(--text);
-  background: var(--accent);
+  color: var(--selected-text);
+  background: var(--selected-bg);
 }
 
 .settings-main {
@@ -614,8 +734,9 @@ dialog select {
 }
 
 .client-chip.selected {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--selected-bg);
+  border-color: var(--selected-bg);
+  color: var(--selected-text);
 }
 
 .client-chip .client-label {
