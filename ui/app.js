@@ -220,6 +220,23 @@ function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// 转义后对命中的搜索词包裹 <mark> 高亮（大小写不敏感）。
+function highlightText(text, query) {
+  const escaped = escapeHtml(text);
+  if (!query) return escaped;
+  let re;
+  try {
+    re = new RegExp(escapeRegExp(query), 'gi');
+  } catch {
+    return escaped;
+  }
+  return escaped.replace(re, (m) => `<mark>${m}</mark>`);
+}
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function updateSessionDialogProjects() {
   els.sessionProject.innerHTML = '';
   const none = document.createElement('option');
@@ -494,6 +511,8 @@ function renderTimeline() {
     el.dataset.id = m.id;
     const text = bytesToText(m.payload);
     const epBadge = m.endpoint ? `<span class="msg-endpoint">${escapeHtml(m.endpoint)}</span>` : '';
+    const displayText = text.length > 200 ? text.slice(0, 200) + '…' : text;
+    const body = q ? highlightText(displayText, q) : escapeHtml(displayText);
     el.innerHTML = `
       <div class="message-meta">
         <span>${formatTime(m.timestamp)}</span>
@@ -501,7 +520,7 @@ function renderTimeline() {
         <span>${m.payload_type}</span>
         ${epBadge}
       </div>
-      <div class="message-body">${escapeHtml(text.slice(0, 200))}${text.length > 200 ? '…' : ''}</div>
+      <div class="message-body">${body}</div>
     `;
     el.addEventListener('click', () => {
       state.selectedMessageId = m.id;
