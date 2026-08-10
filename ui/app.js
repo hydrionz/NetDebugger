@@ -11,6 +11,8 @@ const state = {
   selectedClientId: null,
   unreadCounts: new Map(),
   endpointFilter: new Map(),
+  searchQuery: '',
+  autoScroll: true,
 };
 
 const els = {
@@ -43,6 +45,8 @@ const els = {
   sessionUrl: document.getElementById('session-url'),
   sessionEndpoints: document.getElementById('session-endpoints'),
   timelineFilter: document.getElementById('timeline-filter'),
+  timelineFilterWrap: document.getElementById('timeline-filter-wrap'),
+  timelineSearch: document.getElementById('timeline-search'),
   settingsView: document.getElementById('settings-view'),
   settingMinimizeToTray: document.getElementById('setting-minimize-to-tray'),
   themeRadios: document.querySelectorAll('input[name="theme"]'),
@@ -361,6 +365,9 @@ async function selectSession(id) {
   state.messages.set(id, []);
   state.clients.set(id, []);
   state.endpointFilter.set(id, 'all');
+  state.searchQuery = '';
+  state.autoScroll = true;
+  if (els.timelineSearch) els.timelineSearch.value = '';
   // 清空当前选中会话的未读角标
   if (id) {
     state.unreadCounts.delete(id);
@@ -453,7 +460,9 @@ function populateTimelineFilter(sessionId) {
     els.timelineFilter.appendChild(opt);
   }
   const toolbar = els.timelineFilter.closest('.timeline-toolbar');
-  if (toolbar) toolbar.classList.toggle('hidden', !(s && s.role === 'server') || eps.size === 0);
+  if (toolbar) toolbar.classList.toggle('hidden', !sessionId);
+  // Endpoint 筛选仅在 server 会话且存在 endpoint 时显示；搜索和清空始终可用。
+  els.timelineFilterWrap.classList.toggle('hidden', !(s && s.role === 'server') || eps.size === 0);
 }
 
 function renderTimeline() {
@@ -469,6 +478,10 @@ function renderTimeline() {
   const filter = state.endpointFilter.get(id) || 'all';
   if (filter !== 'all') {
     msgs = msgs.filter(m => m.endpoint === filter);
+  }
+  const q = state.searchQuery.trim().toLowerCase();
+  if (q) {
+    msgs = msgs.filter(m => bytesToText(m.payload).toLowerCase().includes(q));
   }
   if (msgs.length === 0) {
     els.timeline.innerHTML = '<div class="detail-empty">暂无消息</div>';
@@ -498,7 +511,10 @@ function renderTimeline() {
     els.timeline.appendChild(el);
   }
 
-  els.timeline.scrollTop = els.timeline.scrollHeight;
+  // 自动滚动：只有用户停留在底部时才跟随新消息滚动到底；上滑查看历史时暂停。
+  if (state.autoScroll) {
+    els.timeline.scrollTop = els.timeline.scrollHeight;
+  }
 }
 
 function renderDetail() {
@@ -745,6 +761,18 @@ els.timelineFilter.addEventListener('change', () => {
   renderTimeline();
 });
 
+els.timelineSearch.addEventListener('input', () => {
+  state.searchQuery = els.timelineSearch.value;
+  renderTimeline();
+});
+
+// 用户上滑查看历史时暂停自动滚动；回到底部后恢复。
+els.timeline.addEventListener('scroll', () => {
+  const el = els.timeline;
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  state.autoScroll = atBottom;
+});
+
 document.getElementById('btn-clear').addEventListener('click', clearMessages);
 
 document.getElementById('btn-settings').addEventListener('click', openSettingsView);
@@ -794,6 +822,14 @@ listen('session:status', (ev) => {
     }
   }
 }).catch((e) => console.error('listen session:status failed', e));
+
+// 连接失败等错误提示（端口占用、无法连接等）
+listen('session:error', (ev) => {
+  const data = ev.payload.data || ev.payload;
+  if (data && data.message) {
+    showErrorToast(data.message);
+  }
+}).catch((e) => console.error('listen session:error failed', e));
 
 listen('session:message', (ev) => {
   // 全局消息事件，用于非选中会话的未读角标计数
@@ -899,6 +935,26 @@ async function confirmClose() {
     alert('关闭失败: ' + e);
   }
 }
+
+function showErrorToast(message) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  container.classList.remove('hidden');
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-error';
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('toast-hide');
+    setTimeout(() => {
+      toast.remove();
+      if (container.children.length === 0) container.classList.add('hidden');
+    }, 300);
+  }, 5000);
+}
+
+// 禁用浏览器默认右键菜单
+document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // Init
 updateContentArea();

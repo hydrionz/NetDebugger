@@ -30,6 +30,7 @@ pub async fn run_ws_server(
     let bind_addr = match config.bind_addr {
         Some(addr) => addr,
         None => {
+            emit_error(&app, &session_id, "未配置监听地址，无法启动服务端");
             emit_status(&app, &session_id, "error", None, None);
             return;
         }
@@ -39,6 +40,7 @@ pub async fn run_ws_server(
         Ok(l) => l,
         Err(e) => {
             eprintln!("ws server bind error: {}", e);
+            emit_error(&app, &session_id, &format!("监听 {} 失败：端口可能被占用（{}）", bind_addr, e));
             emit_status(&app, &session_id, "error", None, None);
             return;
         }
@@ -309,6 +311,7 @@ pub async fn run_ws_client(
     let url = match config.target_url {
         Some(u) => u,
         None => {
+            emit_error(&app, &session_id, "未配置目标地址，无法启动客户端");
             emit_status(&app, &session_id, "error", None, None);
             return;
         }
@@ -323,6 +326,7 @@ pub async fn run_ws_client(
         Ok(x) => x,
         Err(e) => {
             eprintln!("ws client connect error: {}", e);
+            emit_error(&app, &session_id, &format!("连接 {} 失败：{}", url, friendly_connect_error(&e)));
             set_closed(&app, &db, &session_id, None, None).await;
             return;
         }
@@ -542,6 +546,32 @@ fn emit_status(
             remote_addr,
         },
     );
+}
+
+fn emit_error(app: &AppHandle, session_id: &str, message: &str) {
+    let _ = app.emit(
+        "session:error",
+        serde_json::json!({
+            "session_id": session_id,
+            "message": message,
+        }),
+    );
+}
+
+/// 把常见的连接错误转成更友好的中文提示（补充端口被占用/拒绝/超时的可能原因）。
+fn friendly_connect_error(e: &tokio_tungstenite::tungstenite::Error) -> String {
+    let msg = e.to_string();
+    let lower = msg.to_lowercase();
+    if lower.contains("refused") {
+        return format!("{}（可能原因：服务端未启动或端口错误）", msg);
+    }
+    if lower.contains("timed out") {
+        return format!("{}（可能原因：目标不可达或防火墙拦截）", msg);
+    }
+    if lower.contains("no endpoint") {
+        return "服务端拒绝了该路径（endpoint 未配置或不存在）".to_string();
+    }
+    msg
 }
 
 #[cfg(test)]

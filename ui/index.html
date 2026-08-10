@@ -12,7 +12,6 @@
       <button id="btn-new-project">+ 新建分组</button>
       <button id="btn-new-session">+ 新建连接</button>
       <div class="spacer"></div>
-      <button id="btn-clear">清空</button>
       <button id="btn-settings">设置</button>
     </header>
 
@@ -41,7 +40,10 @@
             <span id="client-list" class="client-list"></span>
           </div>
           <div class="timeline-toolbar hidden">
-            <label>Endpoint: <select id="timeline-filter"><option value="all">全部</option></select></label>
+            <input type="text" id="timeline-search" placeholder="搜索消息..." />
+            <label id="timeline-filter-wrap" class="hidden">Endpoint: <select id="timeline-filter"><option value="all">全部</option></select></label>
+            <div class="spacer"></div>
+            <button id="btn-clear" title="清空当前会话的消息记录">清空</button>
           </div>
           <div id="timeline" class="timeline"></div>
           <div class="send-area">
@@ -166,6 +168,8 @@
       </div>
     </form>
   </dialog>
+
+  <div id="toast-container" class="toast-container hidden"></div>
 
   <script src="app.js"></script>
 </body>
