@@ -24,10 +24,9 @@ const els = {
   clientList: document.getElementById('client-list'),
   detailEmpty: document.getElementById('detail-empty'),
   detailContent: document.getElementById('detail-content'),
-  detailDirection: document.getElementById('detail-direction'),
+  detailEndpoint: document.getElementById('detail-endpoint'),
   detailTime: document.getElementById('detail-time'),
   detailSize: document.getElementById('detail-size'),
-  detailType: document.getElementById('detail-type'),
   detailBody: document.getElementById('detail-body'),
   sendTarget: document.getElementById('send-target'),
   sendType: document.getElementById('send-type'),
@@ -661,10 +660,9 @@ function renderDetail() {
   els.detailEmpty.classList.add('hidden');
   els.detailContent.classList.remove('hidden');
 
-  els.detailDirection.textContent = m.direction === 'in' ? '收到' : '发送';
+  els.detailEndpoint.textContent = m.endpoint || '—';
   els.detailTime.textContent = new Date(m.timestamp).toLocaleString('zh-CN');
   els.detailSize.textContent = formatBytes(m.payload);
-  els.detailType.textContent = m.payload_type;
 
   renderDetailBody(m);
 }
