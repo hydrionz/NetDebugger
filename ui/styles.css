@@ -15,6 +15,9 @@
   --primary-bg: #a8d0f0;
   --primary-text: #1a1a1a;
   --primary-hover: #8cc2eb;
+  --danger-bg: #c42b1c;
+  --danger-text: #ffffff;
+  --danger-hover: #a8251a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -35,6 +38,9 @@
     --primary-bg: #4a9fd4;
     --primary-text: #1a1a1a;
     --primary-hover: #6ab3e0;
+    --danger-bg: #e05a4a;
+    --danger-text: #ffffff;
+    --danger-hover: #c74a3c;
   }
 }
 
@@ -55,6 +61,9 @@
   --primary-bg: #a8d0f0;
   --primary-text: #1a1a1a;
   --primary-hover: #8cc2eb;
+  --danger-bg: #c42b1c;
+  --danger-text: #ffffff;
+  --danger-hover: #a8251a;
 }
 
 :root[data-theme="dark"] {
@@ -71,9 +80,13 @@
   --warning: #dcdcaa;
   --selected-bg: #3c3c3c;
   --selected-text: #ffffff;
-  --primary-bg: #4a9fd4;
-  --primary-text: #1a1a1a;
-  --primary-hover: #6ab3e0;
+    --primary-bg: #4a9fd4;
+    --primary-text: #1a1a1a;
+    --primary-hover: #6ab3e0;
+    --danger-bg: #e05a4a;
+    --danger-text: #ffffff;
+    --danger-hover: #c74a3c;
+  }
 }
 
 * {
@@ -123,6 +136,17 @@ button.primary {
 button.primary:hover {
   background: var(--primary-hover);
   border-color: var(--primary-hover);
+}
+
+button.danger {
+  background: var(--danger-bg);
+  border-color: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+button.danger:hover {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
 }
 
 #app {
