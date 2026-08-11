@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "NetDebugger",
-  "version": "0.1.0",
   "identifier": "com.example.netdebugger",
   "build": {
     "frontendDist": "../ui"
@@ -10,7 +9,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Net Debugger",
+        "title": "NetDebugger",
         "width": 1200,
         "height": 800,
         "minWidth": 800,

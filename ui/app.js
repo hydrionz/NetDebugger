@@ -1481,6 +1481,17 @@ initSplitters();
 initThemePicker();
 initSettingsMenu();
 
+// 加载版本号并填充标题栏与关于页（版本号单点维护于 Cargo.toml）
+(async function initVersion() {
+  try {
+    const v = await invoke('get_app_version');
+    const verEls = document.querySelectorAll('#app-version, #about-version');
+    verEls.forEach((el) => { el.textContent = 'v' + v; });
+  } catch (e) {
+    console.error('get_app_version failed', e);
+  }
+})();
+
 // Load theme setting on startup.
 (async function initTheme() {
   try {

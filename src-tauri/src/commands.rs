@@ -348,6 +348,11 @@ pub async fn update_client_name(
 }
 
 #[tauri::command]
+pub fn get_app_version(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(app.package_info().version.to_string())
+}
+
+#[tauri::command]
 pub fn get_minimize_to_tray(app: AppHandle) -> Result<bool, String> {
     let store = app.store("store.bin").map_err(|e| e.to_string())?;
     Ok(store

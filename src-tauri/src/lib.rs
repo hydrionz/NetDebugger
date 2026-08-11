@@ -166,6 +166,7 @@ pub fn run() {
             commands::disconnect_client,
             commands::get_minimize_to_tray,
             commands::set_minimize_to_tray,
+            commands::get_app_version,
             commands::get_theme,
             commands::set_theme,
             commands::hide_window,
