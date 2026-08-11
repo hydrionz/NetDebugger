@@ -161,9 +161,6 @@ function renderProjectTree() {
         ? (s.bind_addr || ':?')
         : (s.target_url || '?');
       const canEdit = s.status !== 'starting' && s.status !== 'running';
-      const editBtn = canEdit
-        ? `<button data-action="edit-session" data-session="${s.id}" title="编辑">✎</button>`
-        : '';
       const typeLabel = s.protocol === 'ws' ? 'WS' : s.protocol.toUpperCase();
       const roleLabel = s.role === 'server' ? 'S' : 'C';
       const roleClass = s.role === 'server' ? 'role-server' : 'role-client';
@@ -196,9 +193,7 @@ function renderProjectTree() {
         <span class="session-name">${escapeHtml(displayName)}</span>
         ${badge}
         <span class="session-actions">
-          ${editBtn}
           <button data-action="${toggleAction}" data-session="${s.id}" class="${toggleClass}" title="${toggleTitle}">${toggleIcon}</button>
-          <button data-action="delete-session" data-session="${s.id}" title="删除">×</button>
         </span>
       `;
       item.addEventListener('click', (ev) => {
@@ -208,6 +203,12 @@ function renderProjectTree() {
           return;
         }
         selectSession(s.id);
+      });
+      // 右键菜单：编辑 / 删除
+      item.addEventListener('contextmenu', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        showSessionContextMenu(ev.clientX, ev.clientY, s.id, canEdit);
       });
       list.appendChild(item);
 
@@ -247,22 +248,74 @@ function handleTreeAction(ev) {
 
   if (action === 'add-session') {
     openSessionDialog(btn.dataset.project);
-  } else if (action === 'edit-session') {
-    const s = findSession(btn.dataset.session);
-    if (s) openEditSessionDialog(s);
   } else if (action === 'delete-project') {
     deleteProject(btn.dataset.project);
   } else if (action === 'start') {
     startSession(btn.dataset.session);
   } else if (action === 'stop') {
     stopSession(btn.dataset.session);
-  } else if (action === 'delete-session') {
-    deleteSession(btn.dataset.session);
   }
 }
 
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ===== 连接右键菜单（编辑 / 删除）=====
+let contextMenuEl = null;
+
+function ensureContextMenu() {
+  if (contextMenuEl) return;
+  contextMenuEl = document.createElement('div');
+  contextMenuEl.className = 'context-menu hidden';
+  contextMenuEl.innerHTML = `
+    <div class="context-menu-item" data-ctx="edit"><span class="ctx-icon">✎</span><span class="ctx-label">编辑</span></div>
+    <div class="context-menu-item" data-ctx="delete"><span class="ctx-icon">×</span><span class="ctx-label">删除</span></div>
+  `;
+  document.body.appendChild(contextMenuEl);
+
+  contextMenuEl.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-ctx]');
+    if (!item || !contextMenuEl.dataset.sessionId) return;
+    const sessionId = contextMenuEl.dataset.sessionId;
+    hideContextMenu();
+    if (item.dataset.ctx === 'edit') {
+      const s = findSession(sessionId);
+      if (s) openEditSessionDialog(s);
+    } else if (item.dataset.ctx === 'delete') {
+      deleteSession(sessionId);
+    }
+  });
+
+  // 点击其他区域或滚动时关闭菜单
+  document.addEventListener('click', hideContextMenu);
+  document.addEventListener('scroll', hideContextMenu, true);
+}
+
+function showSessionContextMenu(x, y, sessionId, canEdit) {
+  ensureContextMenu();
+  contextMenuEl.dataset.sessionId = sessionId;
+  // 运行中的连接不可编辑
+  const editItem = contextMenuEl.querySelector('[data-ctx="edit"]');
+  editItem.classList.toggle('disabled', !canEdit);
+  contextMenuEl.classList.remove('hidden');
+  contextMenuEl.style.left = x + 'px';
+  contextMenuEl.style.top = y + 'px';
+  // 防止菜单超出窗口右/下边界
+  const rect = contextMenuEl.getBoundingClientRect();
+  if (rect.right > window.innerWidth) {
+    contextMenuEl.style.left = Math.max(0, window.innerWidth - rect.width) + 'px';
+  }
+  if (rect.bottom > window.innerHeight) {
+    contextMenuEl.style.top = Math.max(0, window.innerHeight - rect.height) + 'px';
+  }
+}
+
+function hideContextMenu() {
+  if (contextMenuEl) {
+    contextMenuEl.classList.add('hidden');
+    contextMenuEl.dataset.sessionId = '';
+  }
 }
 
 // 转义后对命中的搜索词包裹 <mark> 高亮（大小写不敏感）。
