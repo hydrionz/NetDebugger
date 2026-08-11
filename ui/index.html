@@ -16,9 +16,10 @@
     </header>
 
     <main class="workspace">
-      <aside class="sidebar">
+      <aside class="sidebar" id="sidebar">
         <div id="project-tree"></div>
       </aside>
+      <div class="splitter splitter-v" id="splitter-sidebar" title="拖动调整宽度"></div>
 
       <div id="content-area" class="content-area">
         <div class="no-selection-placeholder">
@@ -45,7 +46,8 @@
             <button id="btn-clear" title="清空当前会话的消息记录">清空</button>
           </div>
           <div id="timeline" class="timeline"></div>
-          <div class="send-area">
+          <div class="splitter splitter-h" id="splitter-send" title="拖动调整高度"></div>
+          <div class="send-area" id="send-area">
             <div class="send-row">
               <label>目标: <select id="send-target"></select></label>
               <label>类型: <select id="send-type">
@@ -58,7 +60,8 @@
           </div>
         </section>
 
-        <aside class="detail-pane">
+        <div class="splitter splitter-v" id="splitter-detail" title="拖动调整宽度"></div>
+        <aside class="detail-pane" id="detail-pane">
           <div id="detail-empty" class="detail-empty">
             <div class="detail-empty-icon">📋</div>
             <div>选择一条消息查看详情</div>

@@ -1145,9 +1145,120 @@ function showPrompt(message, initialValue) {
 // 禁用浏览器默认右键菜单
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
+// ===== 分栏拖拽调节 =====
+const layout = {
+  sidebarW: 220,
+  detailW: 320,
+  sendH: 150,
+  minSidebarW: 160,
+  maxSidebarW: 500,
+  minDetailW: 200,
+  maxDetailW: 600,
+  minSendH: 90,
+};
+
+function loadLayout() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('netdebugger.layout') || '{}');
+    if (saved.sidebarW) layout.sidebarW = saved.sidebarW;
+    if (saved.detailW) layout.detailW = saved.detailW;
+    if (saved.sendH) layout.sendH = saved.sendH;
+  } catch (e) { /* ignore */ }
+}
+
+function saveLayout() {
+  localStorage.setItem('netdebugger.layout', JSON.stringify({
+    sidebarW: layout.sidebarW,
+    detailW: layout.detailW,
+    sendH: layout.sendH,
+  }));
+}
+
+function applyLayout() {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.style.width = layout.sidebarW + 'px';
+  const detail = document.getElementById('detail-pane');
+  if (detail) detail.style.width = layout.detailW + 'px';
+  const sendArea = document.getElementById('send-area');
+  if (sendArea) sendArea.style.height = layout.sendH + 'px';
+}
+
+// vertical splitter: 拖拽调整 handle 左侧(prev)元素的宽度
+// invert=true 时方向取反（调整的是分隔条右侧区域时，跟随鼠标移动方向变化）
+function initVSplitter(handleId, get, set, min, max, invert) {
+  const handle = document.getElementById(handleId);
+  if (!handle) return;
+  let startX = 0, startVal = 0;
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    startX = e.clientX;
+    startVal = get();
+    document.body.classList.add('resizing');
+    const onMove = (ev) => {
+      const delta = ev.clientX - startX;
+      const val = startVal + (invert ? -delta : delta);
+      set(Math.max(min, Math.min(max, val)));
+      applyLayout();
+    };
+    const onUp = () => {
+      document.body.classList.remove('resizing');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      saveLayout();
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+// horizontal splitter: 拖拽调整 handle 下方(next)元素的高度
+function initHSplitter(handleId, get, set, min, max, invert) {
+  const handle = document.getElementById(handleId);
+  if (!handle) return;
+  let startY = 0, startVal = 0;
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    startY = e.clientY;
+    startVal = get();
+    document.body.classList.add('resizing-h');
+    const onMove = (ev) => {
+      const delta = ev.clientY - startY;
+      const val = startVal + (invert ? -delta : delta);
+      set(Math.max(min, Math.min(max, val)));
+      applyLayout();
+    };
+    const onUp = () => {
+      document.body.classList.remove('resizing-h');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      saveLayout();
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function initSplitters() {
+  loadLayout();
+  applyLayout();
+  initVSplitter('splitter-sidebar',
+    () => layout.sidebarW,
+    (v) => { layout.sidebarW = v; },
+    layout.minSidebarW, layout.maxSidebarW, false);
+  initVSplitter('splitter-detail',
+    () => layout.detailW,
+    (v) => { layout.detailW = v; },
+    layout.minDetailW, layout.maxDetailW, true);
+  initHSplitter('splitter-send',
+    () => layout.sendH,
+    (v) => { layout.sendH = v; },
+    layout.minSendH, Math.round(window.innerHeight * 0.5), true);
+}
+
 // Init
 updateContentArea();
 loadProjects();
+initSplitters();
 
 // Load theme setting on startup.
 (async function initTheme() {

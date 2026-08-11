@@ -150,6 +150,39 @@ button.primary:hover {
   min-height: 0;
 }
 
+.splitter {
+  flex-shrink: 0;
+  background: var(--border);
+  position: relative;
+  z-index: 2;
+}
+
+.splitter-v {
+  width: 5px;
+  cursor: col-resize;
+}
+
+.splitter-h {
+  height: 5px;
+  cursor: row-resize;
+}
+
+.splitter-v:hover,
+.splitter-h:hover {
+  background: var(--accent);
+  opacity: 0.6;
+}
+
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.resizing-h {
+  cursor: row-resize;
+  user-select: none;
+}
+
 .sidebar {
   width: 220px;
   min-width: 160px;
@@ -173,7 +206,8 @@ button.primary:hover {
 }
 
 .content-area.no-selection .main-pane,
-.content-area.no-selection .detail-pane {
+.content-area.no-selection .detail-pane,
+.content-area.no-selection #splitter-detail {
   display: none;
 }
 
@@ -283,6 +317,12 @@ button.primary:hover {
   border-top: 1px solid var(--border);
   padding: 10px 12px;
   background: var(--surface);
+  height: 150px;
+  min-height: 90px;
+  max-height: 50%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .send-row {
@@ -308,10 +348,10 @@ button.primary:hover {
 }
 
 #send-input {
+  flex: 1;
   width: 100%;
-  min-height: 60px;
-  max-height: 140px;
-  resize: vertical;
+  min-height: 0;
+  resize: none;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
