@@ -551,12 +551,13 @@ async function selectSession(id, endpoint) {
   if (id) {
     if (endpoint) {
       const m = state.unreadCounts.get(id);
-      if (m) { m.delete(endpoint); renderProjectTree(); }
+      if (m) m.delete(endpoint);
     } else {
       state.unreadCounts.delete(id);
-      renderProjectTree();
     }
   }
+  // 刷新左侧树：endpoint 选中高亮 / 连接选中态 / 未读角标
+  renderProjectTree();
   updateContentArea();
   renderTimeline();
   renderDetail();
