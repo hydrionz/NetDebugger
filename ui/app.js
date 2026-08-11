@@ -51,7 +51,8 @@ const els = {
   timelineSearch: document.getElementById('timeline-search'),
   settingsView: document.getElementById('settings-view'),
   settingMinimizeToTray: document.getElementById('setting-minimize-to-tray'),
-  themeRadios: document.querySelectorAll('input[name="theme"]'),
+  themeBtn: document.getElementById('btn-theme'),
+  themeMenu: document.getElementById('theme-menu'),
   dlgCloseConfirm: document.getElementById('dlg-close-confirm'),
   closeConfirmMinimizeToTray: document.getElementById('close-confirm-minimize-to-tray'),
 };
@@ -1018,12 +1019,6 @@ document.getElementById('btn-settings-close').addEventListener('click', (ev) => 
   closeSettingsView();
 });
 
-for (const radio of els.themeRadios) {
-  radio.addEventListener('change', () => {
-    applyTheme(getSelectedTheme());
-  });
-}
-
 document.getElementById('btn-close-confirm-ok').addEventListener('click', (ev) => {
   ev.preventDefault();
   confirmClose();
@@ -1123,37 +1118,60 @@ listen('window:close-requested', () => {
   els.dlgCloseConfirm.showModal();
 }).catch((e) => console.error('listen window:close-requested failed', e));
 
-let savedTheme = 'system';
-
 function applyTheme(theme) {
   if (theme === 'system') {
     document.documentElement.removeAttribute('data-theme');
   } else {
     document.documentElement.setAttribute('data-theme', theme);
   }
+  updateThemeButtonIcon(theme);
 }
 
-function getSelectedTheme() {
-  for (const radio of els.themeRadios) {
-    if (radio.checked) return radio.value;
-  }
-  return 'system';
+// 主题下拉菜单
+function initThemePicker() {
+  if (!els.themeBtn || !els.themeMenu) return;
+
+  els.themeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    els.themeMenu.classList.toggle('hidden');
+  });
+
+  els.themeMenu.addEventListener('click', async (e) => {
+    const item = e.target.closest('.theme-menu-item');
+    if (!item) return;
+    const theme = item.dataset.theme;
+    applyTheme(theme);
+    try {
+      await invoke('set_theme', { theme });
+    } catch (err) {
+      console.error('set_theme failed', err);
+    }
+    hideThemeMenu();
+  });
+
+  document.addEventListener('click', hideThemeMenu);
 }
 
-function setSelectedTheme(theme) {
-  for (const radio of els.themeRadios) {
-    radio.checked = radio.value === theme;
+function hideThemeMenu() {
+  if (els.themeMenu) els.themeMenu.classList.add('hidden');
+}
+
+function updateThemeButtonIcon(theme) {
+  const svg = document.getElementById('theme-icon-current');
+  if (!svg) return;
+  if (theme === 'dark') {
+    svg.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  } else if (theme === 'light') {
+    svg.innerHTML = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>';
+  } else {
+    svg.innerHTML = '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>';
   }
 }
 
 async function openSettingsView() {
   try {
     const minimize = await invoke('get_minimize_to_tray');
-    const theme = await invoke('get_theme');
     els.settingMinimizeToTray.checked = minimize;
-    savedTheme = theme;
-    setSelectedTheme(theme);
-    applyTheme(theme);
     els.settingsView.classList.remove('hidden');
   } catch (e) {
     console.error('openSettingsView failed', e);
@@ -1161,17 +1179,13 @@ async function openSettingsView() {
 }
 
 function closeSettingsView() {
-  applyTheme(savedTheme);
   els.settingsView.classList.add('hidden');
 }
 
 async function saveSettings() {
   const minimize = els.settingMinimizeToTray.checked;
-  const theme = getSelectedTheme();
   try {
     await invoke('set_minimize_to_tray', { value: minimize });
-    await invoke('set_theme', { theme });
-    savedTheme = theme;
     closeSettingsView();
   } catch (e) {
     showError('保存设置失败: ' + e);
@@ -1437,12 +1451,12 @@ function initSplitters() {
 updateContentArea();
 loadProjects();
 initSplitters();
+initThemePicker();
 
 // Load theme setting on startup.
 (async function initTheme() {
   try {
     const theme = await invoke('get_theme');
-    savedTheme = theme;
     applyTheme(theme);
   } catch (e) {
     console.error('initTheme failed', e);

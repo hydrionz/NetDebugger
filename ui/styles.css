@@ -145,6 +145,42 @@ button.primary:hover {
   padding: 4px 8px;
 }
 
+.theme-picker {
+  position: relative;
+}
+
+.theme-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 9999;
+  min-width: 130px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+}
+
+.theme-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.theme-menu-item:hover {
+  background: var(--surface-hover);
+}
+
+.theme-menu-item svg {
+  flex-shrink: 0;
+}
+
 #btn-clear:hover {
   color: var(--error);
 }

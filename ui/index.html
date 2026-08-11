@@ -22,6 +22,35 @@
       <button id="btn-new-project">+ 分组</button>
       <button id="btn-new-session">+ 连接</button>
       <div class="spacer"></div>
+      <div class="theme-picker">
+        <button id="btn-theme" class="icon-btn" title="切换主题" aria-label="切换主题">
+          <svg id="theme-icon-current" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+        <div id="theme-menu" class="theme-menu hidden">
+          <div class="theme-menu-item" data-theme="system">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2"/>
+              <path d="M8 21h8M12 17v4"/>
+            </svg>
+            <span>跟随系统</span>
+          </div>
+          <div class="theme-menu-item" data-theme="light">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+            </svg>
+            <span>浅色</span>
+          </div>
+          <div class="theme-menu-item" data-theme="dark">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+            <span>深色</span>
+          </div>
+        </div>
+      </div>
       <button id="btn-settings" class="icon-btn" title="设置" aria-label="设置">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/>
@@ -166,22 +195,6 @@
           <input type="checkbox" id="setting-minimize-to-tray" />
           关闭后最小化到系统托盘
         </label>
-
-        <div class="radio-group">
-          <div class="radio-group-label">主题</div>
-          <label class="radio-label">
-            <input type="radio" name="theme" value="system" id="theme-system" />
-            跟随系统
-          </label>
-          <label class="radio-label">
-            <input type="radio" name="theme" value="light" id="theme-light" />
-            浅色
-          </label>
-          <label class="radio-label">
-            <input type="radio" name="theme" value="dark" id="theme-dark" />
-            深色
-          </label>
-        </div>
       </div>
       <div class="settings-footer">
         <button id="btn-settings-close">关闭</button>
