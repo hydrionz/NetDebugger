@@ -791,6 +791,12 @@ dialog {
   border-radius: 6px;
   padding: 16px;
   min-width: 300px;
+  max-width: calc(100vw - 40px);
+  box-sizing: border-box;
+}
+
+#dlg-session {
+  min-width: 420px;
 }
 
 dialog h3 {
@@ -800,12 +806,15 @@ dialog h3 {
 dialog label {
   display: block;
   margin-bottom: 10px;
+  box-sizing: border-box;
 }
 
 dialog input,
 dialog select {
   width: 100%;
   margin-top: 4px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .dialog-actions {
