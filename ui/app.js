@@ -176,6 +176,7 @@ function renderProjectTree() {
       const toggleAction = isRunning ? 'stop' : 'start';
       const toggleIcon = isRunning ? '⏹' : '▶';
       const toggleTitle = isRunning ? '停止' : '启动';
+      const toggleClass = isRunning ? 'btn-stop' : 'btn-start';
 
       // 未读角标按 endpoint 分桶；连接的角标为各 endpoint 之和。
       const epUnread = state.unreadCounts.get(s.id) || new Map();
@@ -196,7 +197,7 @@ function renderProjectTree() {
         ${badge}
         <span class="session-actions">
           ${editBtn}
-          <button data-action="${toggleAction}" data-session="${s.id}" title="${toggleTitle}">${toggleIcon}</button>
+          <button data-action="${toggleAction}" data-session="${s.id}" class="${toggleClass}" title="${toggleTitle}">${toggleIcon}</button>
           <button data-action="delete-session" data-session="${s.id}" title="删除">×</button>
         </span>
       `;
