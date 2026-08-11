@@ -39,6 +39,7 @@ pub enum TimelineEvent {
         direction: String,
         payload_type: String,
         endpoint: Option<String>,
+        sender: Option<String>,
         #[serde(with = "serde_bytes")]
         payload: Vec<u8>,
         size: usize,

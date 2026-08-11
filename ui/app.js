@@ -573,6 +573,16 @@ function incrementUnread(sessionId, endpoint) {
   renderProjectTree();
 }
 
+// 服务端收到的消息：显示发送者。已重命名的客户端显示名称，否则显示 IP 端口。
+// sender 字段已随消息持久化，重启后历史消息仍能显示发送者地址。
+function getSenderLabel(sessionId, msg) {
+  const clients = state.clients.get(sessionId) || [];
+  const c = msg.client_id ? clients.find((x) => x.id === msg.client_id) : null;
+  if (c && c.name) return `<span class="msg-sender">${escapeHtml(c.name)}</span>`;
+  if (msg.sender) return `<span class="msg-sender">${escapeHtml(msg.sender)}</span>`;
+  return '';
+}
+
 function renderTimeline() {
   els.timeline.innerHTML = '';
   const id = state.selectedSessionId;
@@ -606,6 +616,7 @@ function renderTimeline() {
     el.dataset.id = m.id;
     const text = bytesToText(m.payload);
     const epBadge = m.endpoint ? `<span class="msg-endpoint">${escapeHtml(m.endpoint)}</span>` : '';
+    const sender = m.direction === 'in' ? getSenderLabel(id, m) : '';
     const displayText = text.length > 200 ? text.slice(0, 200) + '…' : text;
     const body = q ? highlightText(displayText, q) : escapeHtml(displayText);
     el.innerHTML = `
@@ -614,6 +625,7 @@ function renderTimeline() {
         <span>${m.direction === 'in' ? '←' : '→'}</span>
         <span>${m.payload_type}</span>
         ${epBadge}
+        ${sender}
       </div>
       <div class="message-body">${body}</div>
     `;
@@ -769,6 +781,8 @@ function renderClientList() {
         c.name = trimmed || null;
         renderClientList();
         updateSendArea();
+        // 时间线气泡的发送者标签同步更新
+        renderTimeline();
       } catch (e) {
         showError('重命名失败: ' + e);
       }

@@ -54,6 +54,7 @@ pub struct Message {
     pub size: usize,
     pub timestamp: i64,
     pub endpoint: Option<String>,
+    pub sender: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +69,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/003_add_session_name.sql"),
     include_str!("../migrations/004_multi_client.sql"),
     include_str!("../migrations/005_endpoints.sql"),
+    include_str!("../migrations/006_message_sender.sql"),
 ];
 
 pub async fn open_db(path: &str) -> Result<Connection> {
@@ -483,8 +485,8 @@ pub async fn insert_message(conn: &Connection, msg: &Message) -> Result<()> {
     let msg = msg.clone();
     conn.call(move |conn| {
         conn.execute(
-            "INSERT INTO messages (id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO messages (id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 &msg.id,
                 &msg.session_id,
@@ -495,6 +497,7 @@ pub async fn insert_message(conn: &Connection, msg: &Message) -> Result<()> {
                 &msg.size.to_string(),
                 &msg.timestamp.to_string(),
                 &msg.endpoint,
+                &msg.sender,
             ],
         )?;
         Ok(())
@@ -513,7 +516,7 @@ pub async fn load_messages(
     conn.call(move |conn| {
         let messages = if let Some(before) = before {
             conn.prepare(
-                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint \
+                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender \
                  FROM messages WHERE session_id = ?1 AND timestamp < ?2 ORDER BY timestamp DESC LIMIT ?3",
             )?
             .query_map(params![
@@ -529,12 +532,13 @@ pub async fn load_messages(
                     size: row.get::<_, usize>(6)?,
                     timestamp: row.get(7)?,
                     endpoint: row.get(8)?,
+                    sender: row.get(9)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?
         } else {
             conn.prepare(
-                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint \
+                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender \
                  FROM messages WHERE session_id = ?1 ORDER BY timestamp DESC LIMIT ?2",
             )?
             .query_map(params![
@@ -550,6 +554,7 @@ pub async fn load_messages(
                     size: row.get::<_, usize>(6)?,
                     timestamp: row.get(7)?,
                     endpoint: row.get(8)?,
+                    sender: row.get(9)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?

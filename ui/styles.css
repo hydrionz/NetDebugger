@@ -855,6 +855,15 @@ dialog select {
   padding: 1px 5px;
 }
 
+.msg-sender {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--selected-bg);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
 .client-ep {
   display: inline;
   font-size: 10px;

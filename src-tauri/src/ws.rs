@@ -217,22 +217,23 @@ async fn run_client_socket_loop<S>(
     handle: Arc<SessionHandle>,
     mut outbound_rx: mpsc::Receiver<ClientMessage>,
     mut client_shutdown_rx: mpsc::Receiver<()>,
-    _remote_addr: String,
+    remote_addr: String,
     endpoint: String,
 ) where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
     let (mut write, mut read) = ws_stream.split();
+    let remote_addr_ref = remote_addr.as_str();
 
     loop {
         tokio::select! {
             msg = read.next() => {
                 match msg {
                     Some(Ok(WsMessage::Text(text))) => {
-                        persist_in_message(&db, &session_id, Some(&client_id), "text", text.as_bytes().to_vec(), Some(&endpoint), &handle).await;
+                        persist_in_message(&db, &session_id, Some(&client_id), "text", text.as_bytes().to_vec(), Some(&endpoint), Some(remote_addr_ref), &handle).await;
                     }
                     Some(Ok(WsMessage::Binary(bin))) => {
-                        persist_in_message(&db, &session_id, Some(&client_id), "binary", bin.to_vec(), Some(&endpoint), &handle).await;
+                        persist_in_message(&db, &session_id, Some(&client_id), "binary", bin.to_vec(), Some(&endpoint), Some(remote_addr_ref), &handle).await;
                     }
                     Some(Ok(WsMessage::Close(_))) | None => {
                         break;
@@ -403,10 +404,10 @@ async fn run_socket_loop<S>(
             msg = read.next() => {
                 match msg {
                     Some(Ok(WsMessage::Text(text))) => {
-                        persist_in_message(&db, &session_id, None, "text", text.as_bytes().to_vec(), endpoint_ref, &handle).await;
+                        persist_in_message(&db, &session_id, None, "text", text.as_bytes().to_vec(), endpoint_ref, None, &handle).await;
                     }
                     Some(Ok(WsMessage::Binary(bin))) => {
-                        persist_in_message(&db, &session_id, None, "binary", bin.to_vec(), endpoint_ref, &handle).await;
+                        persist_in_message(&db, &session_id, None, "binary", bin.to_vec(), endpoint_ref, None, &handle).await;
                     }
                     Some(Ok(WsMessage::Close(_))) | None => {
                         break;
@@ -458,6 +459,7 @@ async fn persist_in_message(
     payload_type: &str,
     payload: Vec<u8>,
     endpoint: Option<&str>,
+    sender: Option<&str>,
     handle: &Arc<SessionHandle>,
 ) {
     let size = payload.len();
@@ -471,6 +473,7 @@ async fn persist_in_message(
         size,
         timestamp: chrono::Utc::now().timestamp_millis(),
         endpoint: endpoint.map(|s| s.to_string()),
+        sender: sender.map(|s| s.to_string()),
     };
     db::insert_message(db, &msg).await.ok();
     let event = TimelineEvent::Message {
@@ -480,6 +483,7 @@ async fn persist_in_message(
         direction: msg.direction.clone(),
         payload_type: msg.payload_type.clone(),
         endpoint: endpoint.map(|s| s.to_string()),
+        sender: sender.map(|s| s.to_string()),
         payload: payload.clone(),
         size: msg.size,
         timestamp: msg.timestamp,
@@ -508,6 +512,7 @@ pub(crate) async fn persist_out_message(
         size,
         timestamp: chrono::Utc::now().timestamp_millis(),
         endpoint: endpoint.map(|s| s.to_string()),
+        sender: None,
     };
     db::insert_message(db, &msg).await.ok();
     let event = TimelineEvent::Message {
@@ -517,6 +522,7 @@ pub(crate) async fn persist_out_message(
         direction: msg.direction.clone(),
         payload_type: msg.payload_type.clone(),
         endpoint: endpoint.map(|s| s.to_string()),
+        sender: None,
         payload: payload.clone(),
         size: msg.size,
         timestamp: msg.timestamp,
