@@ -112,8 +112,6 @@ pub async fn run_ws_server(
                         let (client_outbound_tx, client_outbound_rx) = mpsc::channel::<ClientMessage>(64);
                         let (client_shutdown_tx, client_shutdown_rx) = mpsc::channel::<()>(1);
                         let client_handle = ClientHandle {
-                            id: client_id.clone(),
-                            remote_addr: remote_addr.clone(),
                             outbound_tx: client_outbound_tx,
                             shutdown_tx: client_shutdown_tx,
                             endpoint: endpoint.clone(),
