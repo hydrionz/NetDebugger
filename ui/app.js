@@ -674,13 +674,31 @@ function renderDetailBody(m) {
   } else if (detailTab === 'json') {
     const text = bytesToText(bytes);
     try {
-      els.detailBody.textContent = JSON.stringify(JSON.parse(text), null, 2);
+      const pretty = JSON.stringify(JSON.parse(text), null, 2);
+      els.detailBody.innerHTML = highlightJson(pretty);
     } catch {
       els.detailBody.textContent = '不是有效的 JSON';
     }
   } else {
     els.detailBody.textContent = bytesToText(bytes);
   }
+}
+
+// JSON 语法高亮（先转义 HTML，再按 token 类型包裹 span）
+function highlightJson(json) {
+  const escaped = escapeHtml(json);
+  return escaped
+    .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, (match) => {
+      let cls = 'j-num';
+      if (/^"/.test(match)) {
+        cls = /:$/.test(match) ? 'j-key' : 'j-str';
+      } else if (/true|false/.test(match)) {
+        cls = 'j-bool';
+      } else if (/null/.test(match)) {
+        cls = 'j-null';
+      }
+      return `<span class="${cls}">${match}</span>`;
+    });
 }
 
 function updateContentArea() {
@@ -927,13 +945,38 @@ document.getElementById('btn-close-confirm-ok').addEventListener('click', (ev) =
   confirmClose();
 });
 
-document.querySelectorAll('.detail-tabs button').forEach((btn) => {
+document.querySelectorAll('.detail-tabs button[data-tab]').forEach((btn) => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.detail-tabs button').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.detail-tabs button[data-tab]').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     detailTab = btn.dataset.tab;
     renderDetail();
   });
+});
+
+document.getElementById('btn-copy-message').addEventListener('click', async () => {
+  const msgs = state.messages.get(state.selectedSessionId) || [];
+  const m = msgs.find((x) => x.id === state.selectedMessageId);
+  if (!m) return;
+  // 复制当前查看方式（文本/JSON/十六进制）下的内容
+  let text;
+  if (detailTab === 'hex') {
+    text = bytesToHex(m.payload);
+  } else if (detailTab === 'json') {
+    try {
+      text = JSON.stringify(JSON.parse(bytesToText(m.payload)), null, 2);
+    } catch {
+      text = '不是有效的 JSON';
+    }
+  } else {
+    text = bytesToText(m.payload);
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('已复制');
+  } catch (e) {
+    showError('复制失败: ' + e);
+  }
 });
 
 listen('session:status', (ev) => {
@@ -1066,12 +1109,12 @@ async function confirmClose() {
   }
 }
 
-function showErrorToast(message) {
+function showToast(message, type) {
   const container = document.getElementById('toast-container');
   if (!container) return;
   container.classList.remove('hidden');
   const toast = document.createElement('div');
-  toast.className = 'toast toast-error';
+  toast.className = 'toast' + (type ? ' ' + type : '');
   toast.textContent = message;
   container.appendChild(toast);
   setTimeout(() => {
@@ -1081,6 +1124,10 @@ function showErrorToast(message) {
       if (container.children.length === 0) container.classList.add('hidden');
     }, 300);
   }, 5000);
+}
+
+function showErrorToast(message) {
+  showToast(message, 'toast-error');
 }
 
 // 错误提示统一走 toast，替代浏览器默认 alert。
