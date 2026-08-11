@@ -49,7 +49,7 @@ const els = {
   endpointInput: document.getElementById('endpoint-input'),
   btnEndpointAdd: document.getElementById('btn-endpoint-add'),
   timelineSearch: document.getElementById('timeline-search'),
-  settingsView: document.getElementById('settings-view'),
+  settingsView: document.getElementById('dlg-settings'),
   settingMinimizeToTray: document.getElementById('setting-minimize-to-tray'),
   themeBtn: document.getElementById('btn-theme'),
   themeMenu: document.getElementById('theme-menu'),
@@ -1172,14 +1172,41 @@ async function openSettingsView() {
   try {
     const minimize = await invoke('get_minimize_to_tray');
     els.settingMinimizeToTray.checked = minimize;
-    els.settingsView.classList.remove('hidden');
+    // 每次打开默认回到【通用】页，保存按钮可见
+    document.querySelectorAll('[data-settings-cat]').forEach((c) => {
+      c.classList.toggle('active', c.dataset.settingsCat === 'general');
+    });
+    document.querySelectorAll('[data-settings-pane]').forEach((p) => {
+      p.classList.toggle('hidden', p.dataset.settingsPane !== 'general');
+    });
+    const saveBtn = document.getElementById('btn-settings-save');
+    if (saveBtn) saveBtn.classList.remove('hidden');
+    els.settingsView.showModal();
   } catch (e) {
     console.error('openSettingsView failed', e);
   }
 }
 
+// 设置弹框左侧菜单切换
+function initSettingsMenu() {
+  const cats = document.querySelectorAll('[data-settings-cat]');
+  const saveBtn = document.getElementById('btn-settings-save');
+  cats.forEach((cat) => {
+    cat.addEventListener('click', () => {
+      cats.forEach((c) => c.classList.remove('active'));
+      cat.classList.add('active');
+      const name = cat.dataset.settingsCat;
+      document.querySelectorAll('[data-settings-pane]').forEach((p) => {
+        p.classList.toggle('hidden', p.dataset.settingsPane !== name);
+      });
+      // 保存按钮仅在【通用】页显示
+      if (saveBtn) saveBtn.classList.toggle('hidden', name !== 'general');
+    });
+  });
+}
+
 function closeSettingsView() {
-  els.settingsView.classList.add('hidden');
+  els.settingsView.close();
 }
 
 async function saveSettings() {
@@ -1452,6 +1479,7 @@ updateContentArea();
 loadProjects();
 initSplitters();
 initThemePicker();
+initSettingsMenu();
 
 // Load theme setting on startup.
 (async function initTheme() {

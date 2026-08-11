@@ -184,24 +184,39 @@
     </form>
   </dialog>
 
-  <div id="settings-view" class="settings-view hidden">
-    <div class="settings-sidebar">
-      <div class="settings-category active" data-category="general">通用</div>
-    </div>
-    <div class="settings-main">
-      <div class="settings-content">
-        <h3>通用设置</h3>
-        <label class="checkbox-label">
-          <input type="checkbox" id="setting-minimize-to-tray" />
-          关闭后最小化到系统托盘
-        </label>
+  <dialog id="dlg-settings">
+    <div class="settings-dialog-body">
+      <div class="settings-sidebar">
+        <div class="settings-category active" data-settings-cat="general">通用</div>
+        <div class="settings-category" data-settings-cat="about">关于</div>
       </div>
-      <div class="settings-footer">
-        <button id="btn-settings-close">关闭</button>
-        <button id="btn-settings-save" class="primary">保存设置</button>
+      <div class="settings-main">
+        <div class="settings-pane" data-settings-pane="general">
+          <h3>通用设置</h3>
+          <label class="checkbox-label">
+            <input type="checkbox" id="setting-minimize-to-tray" />
+            关闭后最小化到系统托盘
+          </label>
+        </div>
+        <div class="settings-pane hidden" data-settings-pane="about">
+          <h3>关于</h3>
+          <div class="about-info">
+            <img class="about-icon" src="titlebar-icon.png" alt="NetDebugger" />
+            <div class="about-text">
+              <div class="about-name">NetDebugger</div>
+              <div class="about-row"><span>版本</span>0.1.0</div>
+              <div class="about-row"><span>作者</span>zz</div>
+            </div>
+          </div>
+          <div class="about-desc">跨平台网络协议调试器，当前以 WebSocket 调试为主。支持 WS 服务端/客户端模拟、多 endpoint 路径路由、消息时间线、消息搜索与高亮、按 endpoint 未读角标、消息历史持久化等功能。</div>
+        </div>
+        <div class="settings-footer">
+          <button id="btn-settings-save" class="primary">保存</button>
+          <button id="btn-settings-close">关闭</button>
+        </div>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <dialog id="dlg-close-confirm">
     <form method="dialog">

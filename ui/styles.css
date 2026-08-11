@@ -983,30 +983,35 @@ dialog select {
   margin: 0;
 }
 
-.settings-view {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 100;
+#dlg-settings {
+  width: 560px;
+  height: 400px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.settings-dialog-body {
   display: flex;
-  background: var(--bg);
+  height: 100%;
 }
 
 .settings-sidebar {
-  width: 180px;
-  min-width: 140px;
-  background: var(--surface);
+  width: 130px;
+  flex-shrink: 0;
+  background: var(--bg);
   border-right: 1px solid var(--border);
   padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .settings-category {
-  padding: 10px 16px;
+  padding: 9px 16px;
   cursor: pointer;
   color: var(--text-muted);
   user-select: none;
+  font-size: 13px;
 }
 
 .settings-category:hover {
@@ -1025,27 +1030,70 @@ dialog select {
   min-width: 0;
 }
 
-.settings-content {
+.settings-pane {
   flex: 1;
-  padding: 20px 24px;
+  padding: 16px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
-.settings-content h3 {
-  margin: 0 0 16px;
+.settings-pane h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+
+.settings-pane-actions {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .settings-footer {
-  height: 10%;
-  min-height: 64px;
-  max-height: 80px;
   border-top: 1px solid var(--border);
   background: var(--surface);
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
-  padding: 0 24px;
+  gap: 8px;
+  padding: 10px 16px;
+}
+
+.about-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.about-icon {
+  width: 48px;
+  height: 48px;
+}
+
+.about-name {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.about-row {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.about-row span {
+  color: var(--text-muted);
+  display: inline-block;
+  width: 60px;
+}
+
+.about-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
 }
 
 .hidden {
