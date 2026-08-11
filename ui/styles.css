@@ -138,6 +138,28 @@ button.primary:hover {
   border-color: var(--primary-hover);
 }
 
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+}
+
+.send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary-bg);
+  border-color: var(--primary-bg);
+  color: var(--primary-text);
+  padding: 6px 14px;
+}
+
+#btn-send:hover:not(:disabled) {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
 button.danger {
   background: var(--danger-bg);
   border-color: var(--danger-bg);
