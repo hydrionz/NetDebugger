@@ -145,6 +145,10 @@ button.primary:hover {
   padding: 4px 8px;
 }
 
+#btn-clear:hover {
+  color: var(--error);
+}
+
 .send-btn {
   display: inline-flex;
   align-items: center;
