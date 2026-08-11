@@ -705,12 +705,9 @@ body.resizing-h {
 
 .session-actions {
   margin-left: auto;
-  display: none;
-  gap: 2px;
-}
-
-.session-item:hover .session-actions {
   display: flex;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .session-actions button {
@@ -907,7 +904,7 @@ dialog select {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .checkbox-label {
@@ -1198,16 +1195,33 @@ dialog select {
 }
 
 .app-dialog-body {
-  padding: 16px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .app-dialog-message {
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.4;
   white-space: pre-wrap;
+}
+
+.confirm-session {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.confirm-session .session-type {
+  min-width: 24px;
+  text-align: center;
+}
+
+.confirm-session .role-badge {
+  margin-left: 0;
 }
 
 #dlg-prompt-input {

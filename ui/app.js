@@ -520,6 +520,24 @@ async function startSession(id) {
 }
 
 async function stopSession(id) {
+  const s = findSession(id);
+  if (!s) return;
+  const typeLabel = s.protocol === 'ws' ? 'WS' : s.protocol.toUpperCase();
+  const roleLabel = s.role === 'server' ? 'S' : 'C';
+  const roleClass = s.role === 'server' ? 'role-server' : 'role-client';
+  const roleTitle = s.role === 'server' ? '服务端' : '客户端';
+  const displayName = s.name || (s.role === 'server'
+    ? `WS Server ${s.bind_addr || ':?'}`
+    : `WS Client ${s.target_url || '?'}`);
+  const html = `
+    <div>确定停止该连接吗？</div>
+    <div class="confirm-session">
+      <span class="session-type ${roleClass}">${escapeHtml(typeLabel)}</span>
+      <span class="role-badge ${roleClass}" title="${roleTitle}">${escapeHtml(roleLabel)}</span>
+      <span>${escapeHtml(displayName)}</span>
+    </div>
+  `;
+  if (!await showConfirm('确定停止该连接吗？', html)) return;
   try {
     await invoke('stop_session', { id });
     await loadProjects();
@@ -1202,10 +1220,14 @@ function showError(message) {
 }
 
 // 自定义确认对话框，替代浏览器默认 confirm。resolve(true/false)。
-function showConfirm(message) {
+function showConfirm(message, html) {
   const dlg = document.getElementById('dlg-confirm');
   const msgEl = document.getElementById('dlg-confirm-message');
-  msgEl.textContent = message;
+  if (html) {
+    msgEl.innerHTML = html;
+  } else {
+    msgEl.textContent = message;
+  }
   return new Promise((resolve) => {
     const ok = document.getElementById('btn-confirm-ok');
     const cancel = document.getElementById('btn-confirm-cancel');
