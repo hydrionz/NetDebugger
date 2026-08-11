@@ -29,7 +29,6 @@ const els = {
   detailSize: document.getElementById('detail-size'),
   detailBody: document.getElementById('detail-body'),
   sendTarget: document.getElementById('send-target'),
-  sendType: document.getElementById('send-type'),
   sendInput: document.getElementById('send-input'),
   dlgProject: document.getElementById('dlg-project'),
   projectName: document.getElementById('project-name'),
@@ -810,7 +809,6 @@ function updateSendArea() {
   els.sendTarget.innerHTML = '';
   if (!id) {
     els.sendInput.disabled = true;
-    els.sendType.disabled = true;
     els.sendTarget.disabled = true;
     document.getElementById('btn-send').disabled = true;
     return;
@@ -820,7 +818,6 @@ function updateSendArea() {
 
   const isConnected = s.status === 'running';
   els.sendInput.disabled = !isConnected;
-  els.sendType.disabled = !isConnected;
   els.sendTarget.disabled = !isConnected;
   document.getElementById('btn-send').disabled = !isConnected;
 
@@ -916,7 +913,7 @@ async function sendMessage() {
   if (!id) return;
   const text = els.sendInput.value;
   if (!text) return;
-  const payloadType = els.sendType.value;
+  const payloadType = 'text';
   const s = findSession(id);
   let clientId = null, endpoint = null;
   if (s && s.role === 'server') {
