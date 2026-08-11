@@ -203,7 +203,12 @@ function renderProjectTree() {
           toggleSessionCollapse(s.id);
           return;
         }
-        selectSession(s.id);
+        // 再次点击已选中的连接则取消选择
+        if (state.selectedSessionId === s.id && (state.endpointFilter.get(s.id) || 'all') === 'all') {
+          selectSession(null);
+        } else {
+          selectSession(s.id);
+        }
       });
       // 右键菜单：编辑 / 删除
       item.addEventListener('contextmenu', (ev) => {
@@ -226,7 +231,12 @@ function renderProjectTree() {
             : '';
           epItem.innerHTML = `<span class="endpoint-path">${escapeHtml(ep)}</span>${epBadge}`;
           epItem.addEventListener('click', () => {
-            selectSession(s.id, ep);
+            // 再次点击已选中的 endpoint 则取消选择
+            if (state.selectedSessionId === s.id && state.endpointFilter.get(s.id) === ep) {
+              selectSession(null);
+            } else {
+              selectSession(s.id, ep);
+            }
           });
           epList.appendChild(epItem);
         }
