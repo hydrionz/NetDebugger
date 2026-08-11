@@ -1485,7 +1485,7 @@ initSettingsMenu();
 (async function initVersion() {
   try {
     const v = await invoke('get_app_version');
-    const verEls = document.querySelectorAll('#app-version, #about-version');
+    const verEls = document.querySelectorAll('#app-version, #about-version, #welcome-version');
     verEls.forEach((el) => { el.textContent = 'v' + v; });
   } catch (e) {
     console.error('get_app_version failed', e);
