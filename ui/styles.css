@@ -131,6 +131,63 @@ button.primary:hover {
   height: 100vh;
 }
 
+.titlebar {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.titlebar-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding-left: 8px;
+  white-space: nowrap;
+}
+
+.titlebar-icon {
+  width: 16px;
+  height: 16px;
+  margin-left: 10px;
+  flex-shrink: 0;
+}
+
+.titlebar-spacer {
+  flex: 1;
+}
+
+.titlebar-controls {
+  display: flex;
+  height: 100%;
+}
+
+.win-btn {
+  width: 46px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.win-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.win-btn-close:hover {
+  background: var(--error);
+  color: #fff;
+}
+
 .toolbar {
   display: flex;
   align-items: center;

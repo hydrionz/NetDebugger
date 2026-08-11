@@ -1196,6 +1196,49 @@ function showPrompt(message, initialValue) {
 // 禁用浏览器默认右键菜单
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
+// ===== 无边框窗口控制按钮 + 拖拽 =====
+(function initWindowControls() {
+  const win = window.__TAURI__ && window.__TAURI__.window
+    ? window.__TAURI__.window.getCurrentWindow()
+    : null;
+  const min = document.getElementById('btn-win-min');
+  const max = document.getElementById('btn-win-max');
+  const close = document.getElementById('btn-win-close');
+  if (!win || !min || !max || !close) return;
+
+  min.addEventListener('click', () => { win.minimize().catch(() => {}); });
+
+  const updateMaxIcon = async () => {
+    try {
+      const isMax = await win.isMaximized();
+      max.textContent = isMax ? '❐' : '□';
+    } catch { /* ignore */ }
+  };
+  max.addEventListener('click', () => {
+    win.toggleMaximize().then(updateMaxIcon).catch(() => {});
+  });
+
+  // 关闭复用现有确认流程（弹确认框，与原生关闭一致）
+  close.addEventListener('click', () => {
+    els.dlgCloseConfirm.showModal();
+  });
+
+  // 标题栏拖拽 + 双击最大化/还原：用 e.detail 区分单击拖拽与双击，
+  // 避免 startDragging 与 toggleMaximize 同时触发（否则双击会先最大化又还原）。
+  const dragBar = document.querySelector('.titlebar');
+  if (dragBar) {
+    dragBar.addEventListener('mousedown', (e) => {
+      if (e.buttons !== 1) return;
+      if (e.target.closest('button')) return;
+      if (e.detail === 2) {
+        win.toggleMaximize().catch(() => {});
+      } else {
+        win.startDragging().catch(() => {});
+      }
+    });
+  }
+})();
+
 // ===== 分栏拖拽调节 =====
 const layout = {
   sidebarW: 220,
