@@ -521,6 +521,27 @@ body.resizing-h {
   letter-spacing: 0.3px;
 }
 
+.role-badge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  min-width: 14px;
+  text-align: center;
+  margin-left: -4px;
+}
+
+.role-badge.role-server {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.role-badge.role-client {
+  background: var(--muted-soft);
+  color: var(--accent);
+}
+
 :root {
   --success-soft: rgba(16, 124, 16, 0.12);
   --warning-soft: rgba(156, 95, 0, 0.12);

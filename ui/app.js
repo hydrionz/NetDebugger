@@ -165,6 +165,9 @@ function renderProjectTree() {
         ? `<button data-action="edit-session" data-session="${s.id}" title="编辑">✎</button>`
         : '';
       const typeLabel = s.protocol === 'ws' ? 'WS' : s.protocol.toUpperCase();
+      const roleLabel = s.role === 'server' ? 'S' : 'C';
+      const roleClass = s.role === 'server' ? 'role-server' : 'role-client';
+      const roleTitle = s.role === 'server' ? '服务端' : '客户端';
       const displayName = s.name || (s.role === 'server'
         ? `WS Server ${s.bind_addr || ':?'}`
         : `WS Client ${s.target_url || '?'}`);
@@ -188,6 +191,7 @@ function renderProjectTree() {
       item.innerHTML = `
         ${expander}
         <span class="session-type ${s.status}">${escapeHtml(typeLabel)}</span>
+        <span class="role-badge ${roleClass}" title="${roleTitle}">${escapeHtml(roleLabel)}</span>
         <span class="session-name">${escapeHtml(displayName)}</span>
         ${badge}
         <span class="session-actions">
