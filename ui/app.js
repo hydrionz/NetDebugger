@@ -208,7 +208,7 @@ function renderProjectTree() {
       item.addEventListener('contextmenu', (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
-        showSessionContextMenu(ev.clientX, ev.clientY, s.id, canEdit);
+        showSessionContextMenu(ev.clientX, ev.clientY, s.id, canEdit, isRunning);
       });
       list.appendChild(item);
 
@@ -276,7 +276,7 @@ function ensureContextMenu() {
 
   contextMenuEl.addEventListener('click', (e) => {
     const item = e.target.closest('[data-ctx]');
-    if (!item || !contextMenuEl.dataset.sessionId) return;
+    if (!item || item.classList.contains('disabled') || !contextMenuEl.dataset.sessionId) return;
     const sessionId = contextMenuEl.dataset.sessionId;
     hideContextMenu();
     if (item.dataset.ctx === 'edit') {
@@ -292,12 +292,14 @@ function ensureContextMenu() {
   document.addEventListener('scroll', hideContextMenu, true);
 }
 
-function showSessionContextMenu(x, y, sessionId, canEdit) {
+function showSessionContextMenu(x, y, sessionId, canEdit, isRunning) {
   ensureContextMenu();
   contextMenuEl.dataset.sessionId = sessionId;
-  // 运行中的连接不可编辑
+  // 运行中的连接不可编辑、不可删除
   const editItem = contextMenuEl.querySelector('[data-ctx="edit"]');
   editItem.classList.toggle('disabled', !canEdit);
+  const deleteItem = contextMenuEl.querySelector('[data-ctx="delete"]');
+  deleteItem.classList.toggle('disabled', isRunning);
   contextMenuEl.classList.remove('hidden');
   contextMenuEl.style.left = x + 'px';
   contextMenuEl.style.top = y + 'px';
@@ -492,6 +494,11 @@ function ensureWsScheme(url) {
 }
 
 async function deleteSession(id) {
+  const s = findSession(id);
+  if (s && (s.status === 'running' || s.status === 'starting')) {
+    showError('正在运行的连接不允许删除，请先停止');
+    return;
+  }
   if (!await showConfirm('确定删除该连接及其消息？')) return;
   try {
     await invoke('delete_session', { id });
