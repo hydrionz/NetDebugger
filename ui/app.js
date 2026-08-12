@@ -1357,8 +1357,17 @@ document.addEventListener('contextmenu', (e) => e.preventDefault());
     win.toggleMaximize().then(updateMaxIcon).catch(() => {});
   });
 
-  // 关闭复用现有确认流程（弹确认框，与原生关闭一致）
-  close.addEventListener('click', () => {
+  // 关闭：勾选「最小化到托盘」则直接隐藏窗口，否则弹确认框（与原生关闭一致）
+  close.addEventListener('click', async () => {
+    try {
+      const minimize = await invoke('get_minimize_to_tray');
+      if (minimize) {
+        await invoke('hide_window');
+        return;
+      }
+    } catch (e) {
+      console.error('get_minimize_to_tray failed', e);
+    }
     els.dlgCloseConfirm.showModal();
   });
 
