@@ -230,7 +230,7 @@ function renderProjectTree() {
             : '';
           epItem.innerHTML = `<span class="endpoint-path">${escapeHtml(ep)}</span>${epBadge}`;
           epItem.addEventListener('click', () => {
-            // 再次点击已选中的 endpoint 则取消选择
+            // 与连接一致：再次点击已选中的 endpoint 则取消选择回欢迎页
             if (state.selectedSessionId === s.id && state.endpointFilter.get(s.id) === ep) {
               selectSession(null);
             } else {
@@ -576,7 +576,6 @@ async function selectSession(id, endpoint) {
   state.selectedSessionId = id;
   state.selectedMessageId = null;
   state.selectedClientId = null;
-  state.messages.set(id, []);
   state.clients.set(id, []);
   state.endpointFilter.set(id, endpoint || 'all');
   state.searchQuery = '';
@@ -634,6 +633,7 @@ async function selectSession(id, endpoint) {
     const msgs = await invoke('load_messages', { sessionId: id, limit: 100, before: null });
     state.messages.set(id, msgs.reverse());
     renderTimeline();
+    renderProjectTree();
   } catch (e) {
     console.error('load_messages failed', e);
   }
