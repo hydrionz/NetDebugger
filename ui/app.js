@@ -41,7 +41,7 @@ const els = {
   sessionRole: document.getElementById('session-role'),
   sessionServerConfig: document.getElementById('session-server-config'),
   sessionClientConfig: document.getElementById('session-client-config'),
-  sessionBind: document.getElementById('session-bind'),
+  sessionPort: document.getElementById('session-port'),
   sessionUrl: document.getElementById('session-url'),
   sessionClientEndpoint: document.getElementById('session-client-endpoint'),
   endpointList: document.getElementById('endpoint-list'),
@@ -370,7 +370,7 @@ function openSessionDialog(projectId) {
   els.sessionRole.value = 'server';
   els.sessionRole.disabled = false;
   els.sessionProtocol.disabled = false;
-  els.sessionBind.value = '127.0.0.1:8080';
+  els.sessionPort.value = '8080';
   els.sessionUrl.value = '127.0.0.1:8080';
   els.sessionClientEndpoint.value = '';
   state.endpointDraft = [];
@@ -393,13 +393,13 @@ function openEditSessionDialog(session) {
   els.sessionClientEndpoint.value = (session.endpoints || [])[0] || '';
   renderEndpointList();
   if (session.role === 'server') {
-    els.sessionBind.value = session.bind_addr || '';
+    els.sessionPort.value = extractPort(session.bind_addr);
     els.sessionUrl.value = '127.0.0.1:8080';
     els.sessionClientEndpoint.value = '';
     els.sessionServerConfig.classList.remove('hidden');
     els.sessionClientConfig.classList.add('hidden');
   } else {
-    els.sessionBind.value = '127.0.0.1:8080';
+    els.sessionPort.value = '8080';
     // 目标地址回显：去掉 ws:// 前缀，只显示 host:port（若历史数据带前缀则剥掉）
     els.sessionUrl.value = stripWsPrefix(session.target_url || '');
     els.sessionServerConfig.classList.add('hidden');
@@ -412,6 +412,12 @@ function openEditSessionDialog(session) {
 function stripWsPrefix(url) {
   const m = /^(wss?:\/\/)?(.*)$/.exec(url);
   return m ? m[2] : url;
+}
+
+// 从监听地址（如 0.0.0.0:8080）中提取端口
+function extractPort(bindAddr) {
+  const m = /:(\d+)\s*$/.exec(bindAddr || '');
+  return m ? m[1] : '';
 }
 
 function renderEndpointList() {
@@ -475,12 +481,13 @@ async function saveSession() {
   const targetUrl = isServer
     ? null
     : ensureWsScheme(els.sessionUrl.value.trim());
+  const port = isServer ? els.sessionPort.value.trim() : '';
   const req = {
     project_id: projectId || null,
     name: name || null,
     protocol: els.sessionProtocol.value,
     role: els.sessionRole.value,
-    bind_addr: isServer ? els.sessionBind.value.trim() || null : null,
+    bind_addr: isServer ? (port ? '0.0.0.0:' + port : null) : null,
     target_url: targetUrl || null,
     endpoints,
   };
