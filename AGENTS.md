@@ -16,20 +16,22 @@
 ## 目录结构
 
 ```
-├── PROJECT_STATUS.md        # 项目状态归档（已实现/待办/命令清单/测试清单）
+├── build.ps1              # 一键构建脚本（产物 dist\NetDebugger_v<版本>.exe）
+├── dist/                  # 构建产物输出目录（git 忽略）
+├── PROJECT_STATUS.md      # 项目状态归档（已实现/待办/技术债务）
 ├── src-tauri/
-│   ├── migrations/          # SQLite 数据库迁移脚本（001~005）
+│   ├── migrations/        # SQLite 数据库迁移脚本（001~006）
 │   └── src/
-│       ├── main.rs          # 入口
-│       ├── lib.rs           # Tauri Builder、托盘、关闭事件、命令注册
-│       ├── commands.rs      # 所有 Tauri 命令（业务 + 设置）
-│       ├── db.rs            # 数据库访问层
-│       ├── state.rs         # 应用状态、SessionHandle、TimelineEvent
-│       └── ws.rs            # WebSocket Server/Client 实现
+│       ├── main.rs        # 入口
+│       ├── lib.rs         # Tauri Builder、托盘、关闭事件、命令注册
+│       ├── commands.rs    # 所有 Tauri 命令（业务 + 设置 + get_app_version）
+│       ├── db.rs          # 数据库访问层
+│       ├── state.rs       # 应用状态、SessionHandle、TimelineEvent
+│       └── ws.rs          # WebSocket Server/Client 实现
 └── ui/
-    ├── index.html           # 主界面与设置页结构
-    ├── app.js               # 前端逻辑
-    └── styles.css           # 主题样式（浅色/深色/跟随系统）
+    ├── index.html         # 主界面与设置弹框结构
+    ├── app.js             # 前端逻辑
+    └── styles.css         # 主题样式（浅色/深色/跟随系统）
 ```
 
 ## 开发规则
@@ -67,22 +69,22 @@ cargo check
 cargo test
 ```
 
-Release 构建（不打包）：
+Release 构建（一键脚本，产物带版本号）：
 
 ```powershell
-cd src-tauri
-cargo tauri build --no-bundle
+.\build.ps1
 ```
 
-构建产物：`src-tauri\target\release\app.exe`
+构建产物：`dist\NetDebugger_v<版本号>.exe`
 
 ## 已实现功能摘要
 
 - WebSocket 服务端/客户端模拟；WS Server 多客户端 + 多 endpoint 路径（按路径路由、未知路径 404、按 endpoint 定向广播）
 - 项目分组管理；会话可独立或归组；连接自定义命名与编辑
-- 消息时间线（文本/JSON/十六进制详情）、未读角标（按 endpoint 分桶）、消息历史持久化、消息搜索与高亮
-- endpoint 作为左侧连接树子节点展示，带折叠展开与未读角标，点击过滤该路径消息
-- 自定义弹框组件（确认/输入/toast），无浏览器默认弹框
-- 系统托盘、关闭确认、主题（系统/浅色/深色）、窗口大小持久化
+- 消息时间线（文本/JSON 高亮/十六进制详情、复制）、按 endpoint 未读角标、历史持久化、搜索高亮
+- endpoint 作为左侧连接树子节点（折叠展开、未读角标、点击过滤）；连接右键菜单编辑/删除；启动/停止按钮常显
+- 无边框窗口 + 自定义标题栏（拖拽、双击最大化、最小化/最大化/关闭）
+- 主题下拉切换（系统/浅色/深色）、分栏拖拽调节、自定义弹框组件（确认/输入/toast）、设置弹框（通用/关于）
+- 版本号单点维护于 Cargo.toml，标题栏/欢迎页/关于页统一显示
 
-> 详细的已实现功能、待办列表、后端命令清单、测试清单见 [PROJECT_STATUS.md](PROJECT_STATUS.md)。
+> 详细的已实现功能、待办列表、技术债务见 [PROJECT_STATUS.md](PROJECT_STATUS.md)。
