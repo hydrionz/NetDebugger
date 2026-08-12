@@ -32,6 +32,30 @@ pub fn run() {
 
             app.manage(state::AppState::new(db));
 
+            // Set window background to match the theme so the window
+            // (shown after the frontend is ready) never flashes white.
+            if let Some(window) = app.get_webview_window("main") {
+                let theme = app
+                    .store("store.bin")
+                    .ok()
+                    .and_then(|s| s.get("theme"))
+                    .and_then(|v| v.as_str().map(String::from));
+                let dark = match theme.as_deref() {
+                    Some("dark") => true,
+                    Some("light") => false,
+                    _ => window
+                        .theme()
+                        .map(|t| t == tauri::Theme::Dark)
+                        .unwrap_or(false),
+                };
+                let (r, g, b) = if dark {
+                    (0x1e, 0x1e, 0x1e)
+                } else {
+                    (0xf7, 0xf7, 0xf7)
+                };
+                let _ = window.set_background_color(Some(tauri::window::Color(r, g, b, 255)));
+            }
+
             // Restore window size. Guard against corrupted/too-small values
             // (e.g. a minimized-window size that was accidentally persisted
             // in an earlier version) by enforcing the same minimums as the
@@ -80,6 +104,7 @@ pub fn run() {
                 TrayIconBuilder::new()
                     .icon(icon.clone())
                     .menu(&tray_menu)
+                    .show_menu_on_left_click(false)
                     .on_menu_event(move |app, event| match event.id.as_ref() {
                         "show" => {
                             let _ = window_for_tray.show();
@@ -91,8 +116,15 @@ pub fn run() {
                         _ => {}
                     })
                     .on_tray_icon_event(|tray, event| {
-                        if let tauri::tray::TrayIconEvent::Click { .. } = event {
-                            if let Some(window) = tray.app_handle().get_webview_window("main") {
+                        if let tauri::tray::TrayIconEvent::Click {
+                            button: tauri::tray::MouseButton::Left,
+                            button_state: tauri::tray::MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            if let Some(window) =
+                                tray.app_handle().get_webview_window("main")
+                            {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }

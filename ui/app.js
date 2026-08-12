@@ -1488,15 +1488,24 @@ function initSplitters() {
     layout.minSendH, Math.round(window.innerHeight * 0.5), true);
 }
 
-// Init
-updateContentArea();
-loadProjects();
-initSplitters();
-initThemePicker();
-initSettingsMenu();
+// 加载主题设置
+async function initTheme() {
+  try {
+    const theme = await invoke('get_theme');
+    applyTheme(theme);
+  } catch (e) {
+    console.error('initTheme failed', e);
+  }
+}
 
-// 加载版本号并填充标题栏与关于页（版本号单点维护于 Cargo.toml）
-(async function initVersion() {
+// 首屏初始化完成后显示窗口，跳过 WebView2 冷启动白屏阶段
+(async function init() {
+  updateContentArea();
+  await Promise.all([loadProjects(), initTheme()]);
+  initSplitters();
+  initThemePicker();
+  initSettingsMenu();
+  // 加载版本号并填充标题栏与关于页（版本号单点维护于 Cargo.toml）
   try {
     const v = await invoke('get_app_version');
     const verEls = document.querySelectorAll('#app-version, #about-version, #welcome-version');
@@ -1504,14 +1513,5 @@ initSettingsMenu();
   } catch (e) {
     console.error('get_app_version failed', e);
   }
-})();
-
-// Load theme setting on startup.
-(async function initTheme() {
-  try {
-    const theme = await invoke('get_theme');
-    applyTheme(theme);
-  } catch (e) {
-    console.error('initTheme failed', e);
-  }
+  window.__TAURI__.window.getCurrentWindow().show();
 })();
