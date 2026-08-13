@@ -35,6 +35,8 @@ const els = {
   sendInput: document.getElementById('send-input'),
   settingSendKeyMode: document.getElementById('setting-send-key-mode'),
   dlgProject: document.getElementById('dlg-project'),
+  dlgProjectTitle: document.getElementById('dlg-project-title'),
+  editProjectId: document.getElementById('edit-project-id'),
   projectName: document.getElementById('project-name'),
   dlgSession: document.getElementById('dlg-session'),
   dlgSessionTitle: document.getElementById('dlg-session-title'),
@@ -135,10 +137,6 @@ function renderProjectTree() {
     group.className = 'project-group';
 
     const isUngrouped = p.project.id === '_ungrouped';
-    const deleteBtn = isUngrouped
-      ? ''
-      : `<button data-action="delete-project" data-project="${p.project.id}" title="删除分组">×</button>
-      `;
 
     const header = document.createElement('div');
     header.className = 'project-header';
@@ -147,7 +145,6 @@ function renderProjectTree() {
       <span class="project-name">${escapeHtml(p.project.name)}</span>
       <span class="project-actions">
         <button data-action="add-session" data-project="${p.project.id}" title="添加连接">+</button>
-        ${deleteBtn}
       </span>
     `;
     header.addEventListener('click', (ev) => {
@@ -157,6 +154,14 @@ function renderProjectTree() {
       list.classList.toggle('hidden');
       toggle.textContent = list.classList.contains('hidden') ? '▶' : '▼';
     });
+    // 右键菜单：编辑（重命名）/ 删除（与连接一致的操作逻辑）
+    if (!isUngrouped) {
+      header.addEventListener('contextmenu', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        showProjectContextMenu(ev.clientX, ev.clientY, p.project.id);
+      });
+    }
 
     const list = document.createElement('div');
     list.className = 'session-list';
@@ -273,8 +278,6 @@ function handleTreeAction(ev) {
 
   if (action === 'add-session') {
     openSessionDialog(btn.dataset.project);
-  } else if (action === 'delete-project') {
-    deleteProject(btn.dataset.project);
   } else if (action === 'start') {
     startSession(btn.dataset.session);
   } else if (action === 'stop') {
@@ -301,14 +304,24 @@ function ensureContextMenu() {
 
   contextMenuEl.addEventListener('click', (e) => {
     const item = e.target.closest('[data-ctx]');
-    if (!item || item.classList.contains('disabled') || !contextMenuEl.dataset.sessionId) return;
-    const sessionId = contextMenuEl.dataset.sessionId;
+    const kind = contextMenuEl.dataset.kind;
+    const id = contextMenuEl.dataset.targetId;
+    if (!item || item.classList.contains('disabled') || !kind || !id) return;
     hideContextMenu();
+    if (kind === 'project') {
+      if (item.dataset.ctx === 'edit') {
+        const p = state.projects.find((p) => p.project.id === id);
+        if (p) openEditProjectDialog(p.project);
+      } else if (item.dataset.ctx === 'delete') {
+        deleteProject(id);
+      }
+      return;
+    }
     if (item.dataset.ctx === 'edit') {
-      const s = findSession(sessionId);
+      const s = findSession(id);
       if (s) openEditSessionDialog(s);
     } else if (item.dataset.ctx === 'delete') {
-      deleteSession(sessionId);
+      deleteSession(id);
     }
   });
 
@@ -317,14 +330,7 @@ function ensureContextMenu() {
   document.addEventListener('scroll', hideContextMenu, true);
 }
 
-function showSessionContextMenu(x, y, sessionId, canEdit, isRunning) {
-  ensureContextMenu();
-  contextMenuEl.dataset.sessionId = sessionId;
-  // 运行中的连接不可编辑、不可删除
-  const editItem = contextMenuEl.querySelector('[data-ctx="edit"]');
-  editItem.classList.toggle('disabled', !canEdit);
-  const deleteItem = contextMenuEl.querySelector('[data-ctx="delete"]');
-  deleteItem.classList.toggle('disabled', isRunning);
+function positionContextMenu(x, y) {
   contextMenuEl.classList.remove('hidden');
   contextMenuEl.style.left = x + 'px';
   contextMenuEl.style.top = y + 'px';
@@ -338,10 +344,30 @@ function showSessionContextMenu(x, y, sessionId, canEdit, isRunning) {
   }
 }
 
+function showSessionContextMenu(x, y, sessionId, canEdit, isRunning) {
+  ensureContextMenu();
+  contextMenuEl.dataset.kind = 'session';
+  contextMenuEl.dataset.targetId = sessionId;
+  // 运行中的连接不可编辑、不可删除
+  contextMenuEl.querySelector('[data-ctx="edit"]').classList.toggle('disabled', !canEdit);
+  contextMenuEl.querySelector('[data-ctx="delete"]').classList.toggle('disabled', isRunning);
+  positionContextMenu(x, y);
+}
+
+function showProjectContextMenu(x, y, projectId) {
+  ensureContextMenu();
+  contextMenuEl.dataset.kind = 'project';
+  contextMenuEl.dataset.targetId = projectId;
+  contextMenuEl.querySelector('[data-ctx="edit"]').classList.remove('disabled');
+  contextMenuEl.querySelector('[data-ctx="delete"]').classList.remove('disabled');
+  positionContextMenu(x, y);
+}
+
 function hideContextMenu() {
   if (contextMenuEl) {
     contextMenuEl.classList.add('hidden');
-    contextMenuEl.dataset.sessionId = '';
+    contextMenuEl.dataset.kind = '';
+    contextMenuEl.dataset.targetId = '';
   }
 }
 
@@ -458,16 +484,29 @@ function addEndpointFromInput() {
   renderEndpointList();
 }
 
-async function createProject() {
+async function saveProject() {
   const name = els.projectName.value.trim();
   if (!name) return;
+  const editId = els.editProjectId.value.trim();
   try {
-    await invoke('create_project', { name });
+    if (editId) {
+      await invoke('update_project', { id: editId, name });
+    } else {
+      await invoke('create_project', { name });
+    }
     els.projectName.value = '';
+    els.editProjectId.value = '';
     await loadProjects();
   } catch (e) {
-    showError('创建分组失败: ' + e);
+    showError(editId ? '重命名分组失败: ' + e : '创建分组失败: ' + e);
   }
+}
+
+async function openEditProjectDialog(project) {
+  els.dlgProjectTitle.textContent = '重命名分组';
+  els.editProjectId.value = project.id;
+  els.projectName.value = project.name;
+  els.dlgProject.showModal();
 }
 
 async function deleteProject(id) {
@@ -1042,6 +1081,9 @@ async function clearMessages() {
 
 // Event listeners
 document.getElementById('btn-new-project').addEventListener('click', () => {
+  els.dlgProjectTitle.textContent = '新建分组';
+  els.editProjectId.value = '';
+  els.projectName.value = '';
   els.dlgProject.showModal();
 });
 
@@ -1051,7 +1093,7 @@ document.getElementById('btn-new-session').addEventListener('click', () => {
 
 document.getElementById('btn-project-ok').addEventListener('click', (ev) => {
   ev.preventDefault();
-  createProject();
+  saveProject();
   els.dlgProject.close();
 });
 

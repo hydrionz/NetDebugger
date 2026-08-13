@@ -166,6 +166,21 @@ pub async fn delete_project(conn: &Connection, id: &str) -> Result<()> {
     .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("delete project: {}", e))
 }
 
+pub async fn update_project(conn: &Connection, id: &str, name: &str) -> Result<()> {
+    let id = id.to_string();
+    let name = name.to_string();
+    let now = chrono::Utc::now().timestamp_millis().to_string();
+    conn.call(move |conn| {
+        conn.execute(
+            "UPDATE projects SET name = ?1, updated_at = ?2 WHERE id = ?3",
+            params![&name, &now, &id],
+        )?;
+        Ok(())
+    })
+    .await
+    .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("update project: {}", e))
+}
+
 pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<ProjectWithSessions>> {
     conn.call(|conn| {
         let mut stmt = conn.prepare(

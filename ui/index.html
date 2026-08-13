@@ -135,7 +135,8 @@
 
   <dialog id="dlg-project">
     <form method="dialog">
-      <h3>新建分组</h3>
+      <h3 id="dlg-project-title">新建分组</h3>
+      <input type="hidden" id="edit-project-id" />
       <input type="text" id="project-name" placeholder="分组名称" required />
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>取消</button>

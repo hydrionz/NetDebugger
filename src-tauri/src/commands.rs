@@ -32,6 +32,13 @@ pub async fn delete_project(state: State<'_ , AppState>, id: String) -> Result<(
 }
 
 #[tauri::command]
+pub async fn update_project(state: State<'_ , AppState>, id: String, name: String) -> Result<(), String> {
+    db::update_project(&state.db, &id, &name)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn list_projects(state: State<'_ , AppState>) -> Result<Vec<db::ProjectWithSessions>, String> {
     db::list_projects_with_sessions(&state.db)
         .await
