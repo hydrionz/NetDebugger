@@ -81,7 +81,10 @@
             <span id="client-list" class="client-list"></span>
           </div>
           <div class="timeline-toolbar hidden">
-            <input type="text" id="timeline-search" placeholder="搜索消息..." />
+            <div class="search-wrap">
+              <input type="text" id="timeline-search" placeholder="搜索消息..." />
+              <button id="btn-search-clear" class="search-clear" type="button" title="清空搜索" aria-label="清空搜索">×</button>
+            </div>
             <div class="spacer"></div>
             <button id="btn-clear" class="icon-btn" title="清空当前会话的消息记录" aria-label="清空">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -13,6 +13,8 @@ const state = {
   endpointFilter: new Map(),
   collapsedSessions: new Set(),
   searchQuery: '',
+  searchHits: [],
+  activeHitIndex: -1,
   autoScroll: true,
   endpointDraft: [],
 };
@@ -48,6 +50,7 @@ const els = {
   endpointInput: document.getElementById('endpoint-input'),
   btnEndpointAdd: document.getElementById('btn-endpoint-add'),
   timelineSearch: document.getElementById('timeline-search'),
+  btnSearchClear: document.getElementById('btn-search-clear'),
   settingsView: document.getElementById('dlg-settings'),
   settingMinimizeToTray: document.getElementById('setting-minimize-to-tray'),
   themeBtn: document.getElementById('btn-theme'),
@@ -579,6 +582,8 @@ async function selectSession(id, endpoint) {
   state.clients.set(id, []);
   state.endpointFilter.set(id, endpoint || 'all');
   state.searchQuery = '';
+  state.searchHits = [];
+  state.activeHitIndex = -1;
   state.autoScroll = true;
   if (els.timelineSearch) els.timelineSearch.value = '';
   // 清空当前选中会话（或该 endpoint）的未读角标
@@ -705,6 +710,28 @@ function renderTimeline() {
   if (q) {
     msgs = msgs.filter(m => bytesToText(m.payload).toLowerCase().includes(q));
   }
+
+  // 重建搜索命中列表（仅在搜索激活时填充），供 ↑/↓ 导航使用
+  state.searchHits = [];
+  if (q) {
+    for (const m of msgs) {
+      const lower = bytesToText(m.payload).toLowerCase();
+      let count = 0;
+      let pos = 0;
+      while ((pos = lower.indexOf(q, pos)) !== -1) {
+        count++;
+        pos += q.length;
+      }
+      state.searchHits.push({ messageId: m.id, matchCount: count });
+    }
+    if (state.activeHitIndex >= state.searchHits.length) {
+      state.activeHitIndex = -1;
+    }
+  } else {
+    state.activeHitIndex = -1;
+  }
+  const hitCountById = new Map(state.searchHits.map((h) => [h.messageId, h.matchCount]));
+
   if (msgs.length === 0) {
     els.timeline.innerHTML = '<div class="detail-empty">暂无消息</div>';
     return;
@@ -717,6 +744,10 @@ function renderTimeline() {
     const text = bytesToText(m.payload);
     const epBadge = m.endpoint ? `<span class="msg-endpoint">${escapeHtml(m.endpoint)}</span>` : '';
     const sender = m.direction === 'in' ? getSenderLabel(id, m) : '';
+    const matchCount = hitCountById.get(m.id) || 0;
+    const hitBadge = matchCount > 1
+      ? `<span class="msg-hit-count" title="本条消息共 ${matchCount} 处匹配">${matchCount} matches</span>`
+      : '';
     // 搜索时把窗口锚定到首个命中段，让高亮落在可视区域内；
     // 无搜索或消息短于预算时保持原行为。
     const budget = 200;
@@ -746,11 +777,15 @@ function renderTimeline() {
         <span>${m.payload_type}</span>
         ${epBadge}
         ${sender}
+        ${hitBadge}
       </div>
       <div class="message-body">${body}</div>
     `;
     el.addEventListener('click', () => {
       state.selectedMessageId = m.id;
+      // 点击的是搜索命中时，同步活动索引，让 ↑/↓ 从此处继续
+      const idx = state.searchHits.findIndex((h) => h.messageId === m.id);
+      if (idx >= 0) state.activeHitIndex = idx;
       renderTimeline();
       renderDetail();
     });
@@ -1039,7 +1074,37 @@ els.endpointInput.addEventListener('keydown', (ev) => {
 
 els.timelineSearch.addEventListener('input', () => {
   state.searchQuery = els.timelineSearch.value;
+  state.activeHitIndex = -1;
   renderTimeline();
+});
+
+if (els.btnSearchClear) {
+  els.btnSearchClear.addEventListener('click', () => {
+    els.timelineSearch.value = '';
+    els.timelineSearch.focus();
+    els.timelineSearch.dispatchEvent(new Event('input'));
+  });
+}
+
+// 搜索框内 ↑/↓ 在命中间循环跳转，同时选中并把消息滚到可视区
+els.timelineSearch.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+  const hits = state.searchHits;
+  if (hits.length === 0) return;
+  ev.preventDefault();
+  let idx = state.activeHitIndex;
+  if (ev.key === 'ArrowDown') {
+    idx = idx < 0 ? 0 : (idx + 1) % hits.length;
+  } else {
+    idx = idx < 0 ? hits.length - 1 : (idx - 1 + hits.length) % hits.length;
+  }
+  state.activeHitIndex = idx;
+  const hit = hits[idx];
+  state.selectedMessageId = hit.messageId;
+  renderTimeline();
+  renderDetail();
+  const el = els.timeline.querySelector(`.message[data-id="${CSS.escape(hit.messageId)}"]`);
+  if (el) el.scrollIntoView({ block: 'nearest' });
 });
 
 // 用户上滑查看历史时暂停自动滚动；回到底部后恢复。
