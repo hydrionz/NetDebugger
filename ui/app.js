@@ -33,7 +33,7 @@ const els = {
   detailBody: document.getElementById('detail-body'),
   sendTarget: document.getElementById('send-target'),
   sendInput: document.getElementById('send-input'),
-  sendKeyMode: document.getElementById('send-key-mode'),
+  settingSendKeyMode: document.getElementById('setting-send-key-mode'),
   dlgProject: document.getElementById('dlg-project'),
   projectName: document.getElementById('project-name'),
   dlgSession: document.getElementById('dlg-session'),
@@ -1097,14 +1097,6 @@ function initSendKeyMode() {
       state.sendKeyMode = saved;
     }
   } catch { /* ignore */ }
-  if (els.sendKeyMode) {
-    els.sendKeyMode.value = state.sendKeyMode;
-    els.sendKeyMode.addEventListener('change', () => {
-      const v = els.sendKeyMode.value === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
-      state.sendKeyMode = v;
-      try { localStorage.setItem('send-key-mode', v); } catch { /* ignore */ }
-    });
-  }
 }
 
 els.btnEndpointAdd.addEventListener('click', addEndpointFromInput);
@@ -1331,6 +1323,9 @@ async function openSettingsView() {
   try {
     const minimize = await invoke('get_minimize_to_tray');
     els.settingMinimizeToTray.checked = minimize;
+    if (els.settingSendKeyMode) {
+      els.settingSendKeyMode.value = state.sendKeyMode;
+    }
     // 每次打开默认回到【通用】页，保存按钮可见
     document.querySelectorAll('[data-settings-cat]').forEach((c) => {
       c.classList.toggle('active', c.dataset.settingsCat === 'general');
@@ -1358,8 +1353,8 @@ function initSettingsMenu() {
       document.querySelectorAll('[data-settings-pane]').forEach((p) => {
         p.classList.toggle('hidden', p.dataset.settingsPane !== name);
       });
-      // 保存按钮仅在【通用】页显示
-      if (saveBtn) saveBtn.classList.toggle('hidden', name !== 'general');
+      // 保存按钮在有可保存设置的页面显示（通用 / 快捷键）
+      if (saveBtn) saveBtn.classList.toggle('hidden', name === 'about');
     });
   });
 }
@@ -1370,6 +1365,11 @@ function closeSettingsView() {
 
 async function saveSettings() {
   const minimize = els.settingMinimizeToTray.checked;
+  if (els.settingSendKeyMode) {
+    const v = els.settingSendKeyMode.value === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
+    state.sendKeyMode = v;
+    try { localStorage.setItem('send-key-mode', v); } catch { /* ignore */ }
+  }
   try {
     await invoke('set_minimize_to_tray', { value: minimize });
     closeSettingsView();

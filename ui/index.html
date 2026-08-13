@@ -104,10 +104,6 @@
                   <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
                 </svg>
               </button>
-              <select id="send-key-mode" class="send-key-mode" title="发送快捷键：Enter 发送 / Shift+Enter 换行">
-                <option value="enter">Enter 发送</option>
-                <option value="ctrlEnter">Ctrl+Enter 发送</option>
-              </select>
             </div>
             <textarea id="send-input" placeholder="输入要发送的消息..."></textarea>
           </div>
@@ -187,6 +183,7 @@
     <div class="settings-dialog-body">
       <div class="settings-sidebar">
         <div class="settings-category active" data-settings-cat="general">通用</div>
+        <div class="settings-category" data-settings-cat="shortcuts">快捷键</div>
         <div class="settings-category" data-settings-cat="about">关于</div>
       </div>
       <div class="settings-main">
@@ -195,6 +192,16 @@
           <label class="checkbox-label">
             <input type="checkbox" id="setting-minimize-to-tray" />
             关闭后最小化到系统托盘
+          </label>
+        </div>
+        <div class="settings-pane hidden" data-settings-pane="shortcuts">
+          <h3>快捷键设置</h3>
+          <label class="settings-row">
+            <span>发送消息</span>
+            <select id="setting-send-key-mode">
+              <option value="enter">Enter</option>
+              <option value="ctrlEnter">Ctrl+Enter</option>
+            </select>
           </label>
         </div>
         <div class="settings-pane hidden" data-settings-pane="about">
