@@ -1,7 +1,7 @@
 # NetDebugger 项目状态归档
 
 > 本文档记录 NetDebugger 的当前状态、已实现功能、待办事项及技术债务。开发规则见 [AGENTS.md](AGENTS.md)。
-> 最后更新：2026-08-12
+> 最后更新：2026-08-13
 
 ---
 
@@ -10,7 +10,7 @@
 **名称**：NetDebugger
 **定位**：跨平台网络协议调试器（Tauri v2 + Rust + 原生 HTML/CSS/JS），当前以 WebSocket 调试为主
 
-**技术栈**：Tauri v2 · Tokio · tokio-tungstenite · SQLite (tokio-rusqlite) · tauri-plugin-store
+**技术栈**：Tauri v2 · Tokio · tokio-tungstenite · SQLite (tokio-rusqlite) · tauri-plugin-store · tauri-plugin-single-instance
 
 **版本**：单点维护于 `src-tauri/Cargo.toml`（`version` 字段）；标题栏 / 欢迎页 / 关于页 / 构建产物名（`NetDebugger_v<版本>.exe`）统一读取
 
@@ -24,6 +24,7 @@
 - [x] 消息发送目标：全体广播 / 某 endpoint 全体广播 / 指定客户端（当前仅支持发送文本）
 - [x] 项目分组管理；会话可独立或归组；连接自定义命名、编辑（运行中禁止编辑，协议/角色创建后锁定）
 - [x] 客户端一个连接对应一个 endpoint（目标地址只填 host:port，endpoint 拼接到 URL）
+- [x] 服务端监听地址只填端口，自动绑定 `0.0.0.0:端口`（连接树显示 `WS Server 0.0.0.0:port`）
 - [x] 消息时间线（文本 / JSON 高亮 / 十六进制详情）、复制按钮、消息搜索与高亮、历史持久化
 - [x] 未读角标按 endpoint 分桶；endpoint 作为左侧连接树子节点（折叠/展开、点击只看该路径、连接角标为各 endpoint 之和）
 - [x] 服务端收到的消息气泡显示发送者（重命名客户端后显示名称，否则显示 IP 端口，重启后仍保留）
@@ -38,7 +39,10 @@
 - [x] 主题下拉切换（系统/浅色/深色），设置弹框（通用 / 关于 左右两栏）
 - [x] 自定义弹框组件（确认/输入/toast），危险操作确认按钮红色；无浏览器默认弹框
 - [x] 端口占用 / 连接失败 toast 友好提示；禁用浏览器右键菜单
-- [x] 系统托盘、关闭确认、窗口大小持久化
+- [x] 系统托盘（左键单击显示/隐藏窗口、无白块）、关闭确认、窗口大小持久化
+- [x] 单例运行：只允许一个进程，再次启动直接激活（显示 + 聚焦）已有窗口
+- [x] 启动无白屏（窗口初始隐藏 `visible:false`，前端就绪后 `show()`），窗口背景色随主题
+- [x] 关闭按钮遵循"关闭后最小化到系统托盘"设置（勾选则直接隐藏，否则弹确认框）
 
 ---
 
