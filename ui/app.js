@@ -91,6 +91,16 @@ function bytesToText(bytes) {
   }
 }
 
+// 判断字节流是否为完整 JSON（对象或数组；null 与字面量不算）
+function isCompleteJson(bytes) {
+  try {
+    const v = JSON.parse(bytesToText(bytes));
+    return v !== null && typeof v === 'object';
+  } catch {
+    return false;
+  }
+}
+
 function findSession(id) {
   for (const p of state.projects) {
     for (const s of p.sessions) {
@@ -786,6 +796,8 @@ function renderTimeline() {
       // 点击的是搜索命中时，同步活动索引，让 ↑/↓ 从此处继续
       const idx = state.searchHits.findIndex((h) => h.messageId === m.id);
       if (idx >= 0) state.activeHitIndex = idx;
+      // 完整 JSON 自动切到 JSON tab，其余走文本 tab
+      setDetailTab(isCompleteJson(m.payload) ? 'json' : 'text');
       renderTimeline();
       renderDetail();
     });
@@ -1133,11 +1145,18 @@ document.getElementById('btn-close-confirm-ok').addEventListener('click', (ev) =
   confirmClose();
 });
 
+// 切换详情 tab 并同步按钮的 active 态
+function setDetailTab(tab) {
+  if (detailTab === tab) return;
+  detailTab = tab;
+  document.querySelectorAll('.detail-tabs button[data-tab]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+}
+
 document.querySelectorAll('.detail-tabs button[data-tab]').forEach((btn) => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.detail-tabs button[data-tab]').forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    detailTab = btn.dataset.tab;
+    setDetailTab(btn.dataset.tab);
     renderDetail();
   });
 });
