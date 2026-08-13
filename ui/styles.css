@@ -516,6 +516,13 @@ body.resizing-h {
   min-width: 100px;
 }
 
+.send-row .send-key-mode {
+  min-width: 0;
+  font-size: 11px;
+  padding: 2px 6px;
+  margin-left: -4px;
+}
+
 .send-row button {
   margin-left: auto;
   min-width: 60px;

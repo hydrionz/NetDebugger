@@ -15,6 +15,7 @@ const state = {
   searchQuery: '',
   searchHits: [],
   activeHitIndex: -1,
+  sendKeyMode: 'enter',  // 'enter' = Enter 发送/Shift+Enter 换行；'ctrlEnter' = Ctrl+Enter 发送/Enter 换行
   autoScroll: true,
   endpointDraft: [],
 };
@@ -32,6 +33,7 @@ const els = {
   detailBody: document.getElementById('detail-body'),
   sendTarget: document.getElementById('send-target'),
   sendInput: document.getElementById('send-input'),
+  sendKeyMode: document.getElementById('send-key-mode'),
   dlgProject: document.getElementById('dlg-project'),
   projectName: document.getElementById('project-name'),
   dlgSession: document.getElementById('dlg-session'),
@@ -1069,12 +1071,41 @@ els.sessionRole.addEventListener('change', () => {
 });
 
 document.getElementById('btn-send').addEventListener('click', sendMessage);
+
+// 发送键模式：'enter' = Enter 发送、Shift+Enter 换行（聊天风格，默认）；
+// 'ctrlEnter' = Ctrl+Enter 发送、Enter 换行（编辑器风格）。
+// 任何修饰键组合下都显式处理：匹配发送则发，否则插入换行（不依赖浏览器默认行为，
+// 因为 Tauri WebView 对 Ctrl+Enter 等的默认 newline 不可靠）。
 els.sendInput.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Enter' && !ev.shiftKey) {
-    ev.preventDefault();
+  if (ev.key !== 'Enter' || ev.isComposing) return;
+  const isSend = state.sendKeyMode === 'ctrlEnter'
+    ? ev.ctrlKey && !ev.shiftKey && !ev.altKey && !ev.metaKey
+    : !ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey;
+  ev.preventDefault();
+  if (isSend) {
     sendMessage();
+  } else {
+    const t = ev.target;
+    t.setRangeText('\n', t.selectionStart, t.selectionEnd, 'end');
   }
 });
+
+function initSendKeyMode() {
+  try {
+    const saved = localStorage.getItem('send-key-mode');
+    if (saved === 'enter' || saved === 'ctrlEnter') {
+      state.sendKeyMode = saved;
+    }
+  } catch { /* ignore */ }
+  if (els.sendKeyMode) {
+    els.sendKeyMode.value = state.sendKeyMode;
+    els.sendKeyMode.addEventListener('change', () => {
+      const v = els.sendKeyMode.value === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
+      state.sendKeyMode = v;
+      try { localStorage.setItem('send-key-mode', v); } catch { /* ignore */ }
+    });
+  }
+}
 
 els.btnEndpointAdd.addEventListener('click', addEndpointFromInput);
 els.endpointInput.addEventListener('keydown', (ev) => {
@@ -1628,6 +1659,7 @@ async function initTheme() {
   initSplitters();
   initThemePicker();
   initSettingsMenu();
+  initSendKeyMode();
   // 加载版本号并填充标题栏与关于页（版本号单点维护于 Cargo.toml）
   try {
     const v = await invoke('get_app_version');
