@@ -717,7 +717,27 @@ function renderTimeline() {
     const text = bytesToText(m.payload);
     const epBadge = m.endpoint ? `<span class="msg-endpoint">${escapeHtml(m.endpoint)}</span>` : '';
     const sender = m.direction === 'in' ? getSenderLabel(id, m) : '';
-    const displayText = text.length > 200 ? text.slice(0, 200) + '…' : text;
+    // 搜索时把窗口锚定到首个命中段，让高亮落在可视区域内；
+    // 无搜索或消息短于预算时保持原行为。
+    const budget = 200;
+    let displayText;
+    if (q) {
+      const lower = text.toLowerCase();
+      const idx = lower.indexOf(q);
+      if (idx === -1) {
+        displayText = text;
+      } else {
+        const half = Math.floor((budget - q.length) / 2);
+        const left = Math.max(0, idx - half);
+        const right = Math.min(text.length, left + budget);
+        const finalLeft = Math.max(0, right - budget);
+        const prefix = finalLeft > 0 ? '…' : '';
+        const suffix = right < text.length ? '…' : '';
+        displayText = prefix + text.slice(finalLeft, right) + suffix;
+      }
+    } else {
+      displayText = text.length > budget ? text.slice(0, budget) + '…' : text;
+    }
     const body = q ? highlightText(displayText, q) : escapeHtml(displayText);
     el.innerHTML = `
       <div class="message-meta">
@@ -774,20 +794,27 @@ function renderDetailBody(m) {
     els.detailBody.textContent = bytesToHex(bytes);
   } else if (detailTab === 'json') {
     const text = bytesToText(bytes);
+    const q = state.searchQuery.trim();
     try {
       const pretty = JSON.stringify(JSON.parse(text), null, 2);
-      els.detailBody.innerHTML = highlightJson(pretty);
+      els.detailBody.innerHTML = highlightJson(pretty, q);
     } catch {
       els.detailBody.textContent = '不是有效的 JSON';
     }
   } else {
-    els.detailBody.textContent = bytesToText(bytes);
+    const text = bytesToText(bytes);
+    const q = state.searchQuery.trim();
+    els.detailBody.innerHTML = q ? highlightText(text, q) : escapeHtml(text);
   }
 }
 
-// JSON 语法高亮（先转义 HTML，再按 token 类型包裹 span）
-function highlightJson(json) {
+// JSON 语法高亮（先转义 HTML，再按 token 类型包裹 span）。
+// 可选 query：对每个 token 内部再包 <mark>，保持外层 span 不被截断。
+function highlightJson(json, query) {
   const escaped = escapeHtml(json);
+  const searchRe = query
+    ? new RegExp(escapeRegExp(query), 'gi')
+    : null;
   return escaped
     .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, (match) => {
       let cls = 'j-num';
@@ -798,7 +825,10 @@ function highlightJson(json) {
       } else if (/null/.test(match)) {
         cls = 'j-null';
       }
-      return `<span class="${cls}">${match}</span>`;
+      const inner = searchRe
+        ? match.replace(searchRe, (m) => `<mark>${m}</mark>`)
+        : match;
+      return `<span class="${cls}">${inner}</span>`;
     });
 }
 

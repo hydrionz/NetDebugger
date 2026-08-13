@@ -1276,14 +1276,16 @@ dialog select {
   transform: translateY(-6px);
 }
 
-.message-body mark {
+.message-body mark,
+#detail-body mark {
   background: #ffe066;
   color: #1a1a1a;
   padding: 0 1px;
   border-radius: 2px;
 }
 
-:root[data-theme="dark"] .message-body mark {
+:root[data-theme="dark"] .message-body mark,
+:root[data-theme="dark"] #detail-body mark {
   background: #8a6d00;
   color: #ffffff;
 }
