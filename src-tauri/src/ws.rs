@@ -71,6 +71,7 @@ pub async fn run_ws_server(
     .await
     .ok();
     emit_status(&app, &session_id, "running", local_addr.clone(), None);
+    persist_notice(&db, &handle, &session_id, format!("服务端【{}】已启动", local_addr.as_deref().unwrap_or(":?"))).await;
 
     // Accept loop for multiple clients.
     let endpoints: Option<Vec<String>> = config.endpoints.filter(|v| !v.is_empty());
@@ -132,6 +133,7 @@ pub async fn run_ws_server(
                                 "endpoint": &endpoint,
                             }),
                         );
+                        persist_notice(&db, &handle, &session_id, format!("客户端【{}】已连接", remote_addr)).await;
 
                         let app_clone = app.clone();
                         let db_clone = db.clone();
@@ -199,6 +201,7 @@ pub async fn run_ws_server(
         }
     }
 
+    persist_notice(&db, &handle, &session_id, format!("服务端【{}】已断开", local_addr.as_deref().unwrap_or(":?"))).await;
     set_closed(&app, &db, &session_id, local_addr.as_deref(), None).await;
     // 任务退出，从 state.sessions 里移除自己
     let state = app.state::<crate::state::AppState>();
@@ -273,7 +276,7 @@ async fn run_client_socket_loop<S>(
     }
 
     // Cleanup client resources.
-    cleanup_client(&app, &db, &session_id, &client_id, &handle).await;
+    cleanup_client(&app, &db, &session_id, &client_id, &remote_addr, &handle).await;
 }
 
 async fn cleanup_client(
@@ -281,6 +284,7 @@ async fn cleanup_client(
     db: &db::DbConnection,
     session_id: &str,
     client_id: &str,
+    remote_addr: &str,
     handle: &Arc<SessionHandle>,
 ) {
     // Remove from session's client map.
@@ -298,6 +302,7 @@ async fn cleanup_client(
             "client_id": client_id,
         }),
     );
+    persist_notice(db, handle, session_id, format!("客户端【{}】已断开连接", remote_addr)).await;
 }
 
 pub async fn run_ws_client(
@@ -364,6 +369,7 @@ pub async fn run_ws_client(
         None,
         Some(remote_addr.clone()),
     );
+    persist_notice(&db, &handle, &session_id, format!("与服务端【{}】的连接已成功建立", display_addr(&remote_addr))).await;
 
     run_socket_loop(
         app,
@@ -443,6 +449,7 @@ async fn run_socket_loop<S>(
         }
     }
 
+    persist_notice(&db, &handle, &session_id, format!("与服务端【{}】的连接已断开", display_addr(&remote_addr))).await;
     set_closed(&app, &db, &session_id, local_addr.as_deref(), Some(&remote_addr)).await;
     // 任务退出，从 state.sessions 里移除自己
     let state = app.state::<crate::state::AppState>();
@@ -530,10 +537,54 @@ pub(crate) async fn persist_out_message(
 }
 
 async fn send_timeline_event(handle: &Arc<SessionHandle>, event: TimelineEvent) {
-    let tx = handle.timeline_tx.lock().await;
-    if let Some(ch) = tx.as_ref() {
+    let session_id = match &event {
+        TimelineEvent::Message { session_id, .. }
+        | TimelineEvent::Notice { session_id, .. }
+        | TimelineEvent::Status { session_id, .. } => session_id,
+    };
+    let state = handle.app.state::<crate::state::AppState>();
+    let channels = state.timeline_channels.lock().await;
+    if let Some(ch) = channels.get(session_id) {
         let _ = ch.send(event);
     }
+}
+
+/// 连接状态提示：持久化为 payload_type='notice' 的消息（历史可见），同时实时推送到时间线。
+async fn persist_notice(
+    db: &db::DbConnection,
+    handle: &Arc<SessionHandle>,
+    session_id: &str,
+    text: String,
+) {
+    let timestamp = chrono::Utc::now().timestamp_millis();
+    let msg = db::Message {
+        id: Uuid::new_v4().to_string(),
+        session_id: session_id.to_string(),
+        client_id: None,
+        direction: "in".to_string(),
+        payload_type: "notice".to_string(),
+        payload: text.clone().into_bytes(),
+        size: text.len(),
+        timestamp,
+        endpoint: None,
+        sender: None,
+    };
+    if let Err(e) = db::insert_message(db, &msg).await {
+        eprintln!("insert notice error: {}", e);
+    }
+    send_timeline_event(handle, TimelineEvent::Notice {
+        session_id: session_id.to_string(),
+        text,
+        timestamp,
+    })
+    .await;
+}
+
+/// 客户端展示的地址：去掉 ws:// / wss:// 前缀，只保留 host:port（可能带路径）。
+fn display_addr(url: &str) -> &str {
+    url.strip_prefix("ws://")
+        .or_else(|| url.strip_prefix("wss://"))
+        .unwrap_or(url)
 }
 
 async fn set_closed(

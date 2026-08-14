@@ -705,6 +705,8 @@ async function selectSession(id, endpoint) {
   const channel = new Channel((event) => {
     if (event.type === 'Message') {
       appendMessage(id, event.data);
+    } else if (event.type === 'Notice') {
+      appendNotice(id, event.data);
     } else if (event.type === 'Status') {
       const s = findSession(event.data.session_id);
       if (s) {
@@ -755,6 +757,18 @@ function appendMessage(sessionId, msg) {
   renderTimeline();
 }
 
+// 连接状态提示：与消息共用同一条时间线，形态与历史消息一致（payload_type='notice'），可随 load_messages 一起加载。
+function appendNotice(sessionId, notice) {
+  if (state.selectedSessionId !== sessionId) return;
+  const list = state.messages.get(sessionId) || [];
+  list.push({
+    payload_type: 'notice',
+    payload: new TextEncoder().encode(notice.text),
+    timestamp: notice.timestamp,
+  });
+  renderTimeline();
+}
+
 function incrementUnread(sessionId, endpoint) {
   // 当前选中的会话（且未按 endpoint 筛选或正好筛的是该 endpoint）不累计未读
   if (state.selectedSessionId === sessionId) {
@@ -793,11 +807,12 @@ function renderTimeline() {
   let msgs = state.messages.get(id) || [];
   const filter = state.endpointFilter.get(id) || 'all';
   if (filter !== 'all') {
-    msgs = msgs.filter(m => m.endpoint === filter);
+    // 连接提示属于会话级事件，不随 endpoint 筛选隐藏；只按 endpoint 过滤真正的消息
+    msgs = msgs.filter(m => m.payload_type === 'notice' || m.endpoint === filter);
   }
   const q = state.searchQuery.trim().toLowerCase();
   if (q) {
-    msgs = msgs.filter(m => bytesToText(m.payload).toLowerCase().includes(q));
+    msgs = msgs.filter(m => m.payload_type !== 'notice' && bytesToText(m.payload).toLowerCase().includes(q));
   }
 
   // 重建搜索命中列表（仅在搜索激活时填充），供 ↑/↓ 导航使用
@@ -827,6 +842,13 @@ function renderTimeline() {
   }
 
   for (const m of msgs) {
+    if (m.payload_type === 'notice') {
+      const n = document.createElement('div');
+      n.className = 'timeline-notice';
+      n.innerHTML = `<span>${formatTime(m.timestamp)}</span> ${escapeHtml(bytesToText(m.payload))}`;
+      els.timeline.appendChild(n);
+      continue;
+    }
     const el = document.createElement('div');
     el.className = 'message ' + m.direction + (m.id === state.selectedMessageId ? ' selected' : '');
     el.dataset.id = m.id;

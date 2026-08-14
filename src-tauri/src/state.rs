@@ -51,6 +51,11 @@ pub enum TimelineEvent {
         local_addr: Option<String>,
         remote_addr: Option<String>,
     },
+    Notice {
+        session_id: String,
+        text: String,
+        timestamp: i64,
+    },
 }
 
 #[derive(Debug)]
@@ -64,13 +69,15 @@ pub struct SessionHandle {
     pub app: tauri::AppHandle,
     pub shutdown_tx: mpsc::Sender<()>,
     pub outbound_tx: mpsc::Sender<OutgoingMessage>,
-    pub timeline_tx: Mutex<Option<Channel<TimelineEvent>>>,
     pub clients: Arc<RwLock<HashMap<String, ClientHandle>>>,
 }
 
 pub struct AppState {
     pub db: Connection,
     pub sessions: Arc<RwLock<HashMap<String, Arc<SessionHandle>>>>,
+    // 时间线订阅 channel 放在 AppState（不随会话运行状态消失），
+    // 这样会话未运行时也能订阅，启动瞬间的连接提示可以实时送达。
+    pub timeline_channels: Arc<Mutex<HashMap<String, Channel<TimelineEvent>>>>,
 }
 
 impl AppState {
@@ -78,6 +85,7 @@ impl AppState {
         Self {
             db,
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            timeline_channels: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

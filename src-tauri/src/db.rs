@@ -70,6 +70,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/004_multi_client.sql"),
     include_str!("../migrations/005_endpoints.sql"),
     include_str!("../migrations/006_message_sender.sql"),
+    include_str!("../migrations/007_notice_payload_type.sql"),
 ];
 
 pub async fn open_db(path: &str) -> Result<Connection> {

@@ -487,6 +487,17 @@ body.resizing-h {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
+.timeline-notice {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .send-area {
   border-top: 1px solid var(--border);
   padding: 10px 12px;

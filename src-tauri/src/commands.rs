@@ -182,7 +182,6 @@ pub async fn start_session(
         app: app.clone(),
         shutdown_tx,
         outbound_tx,
-        timeline_tx: tokio::sync::Mutex::new(None),
         clients: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
     });
 
@@ -321,15 +320,12 @@ pub async fn subscribe_timeline(
     session_id: String,
     channel: Channel<TimelineEvent>,
 ) -> Result<(), String> {
-    let handle = {
-        let sessions = state.sessions.read().await;
-        sessions.get(&session_id).cloned()
-    };
-
-    if let Some(h) = handle {
-        let mut tx = h.timeline_tx.lock().await;
-        *tx = Some(channel);
-    }
+    // channel 存在 AppState，会话未运行时也可订阅，start 瞬间的提示不会丢
+    state
+        .timeline_channels
+        .lock()
+        .await
+        .insert(session_id, channel);
     Ok(())
 }
 
