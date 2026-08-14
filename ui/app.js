@@ -18,6 +18,8 @@ const state = {
   truncateMessages: true,  // 长消息截断显示（工具栏"截断"切换，localStorage 持久化）
   sendKeyMode: 'enter',  // 'enter' = Enter 发送/Shift+Enter 换行；'ctrlEnter' = Ctrl+Enter 发送/Enter 换行
   autoScroll: true,
+  hasMoreOlder: new Map(),  // sessionId → 是否还有更早的历史可加载
+  loadingOlder: new Set(),  // 正在加载更早历史的 sessionId
   endpointDraft: [],
 };
 
@@ -728,6 +730,8 @@ async function selectSession(id, endpoint) {
   try {
     const msgs = await invoke('load_messages', { sessionId: id, limit: 100, before: null });
     state.messages.set(id, msgs.reverse());
+    state.hasMoreOlder.set(id, msgs.length >= 100);
+    state.loadingOlder.delete(id);
     renderTimeline();
     renderProjectTree();
   } catch (e) {
@@ -747,6 +751,36 @@ async function selectSession(id, endpoint) {
   } else {
     state.clients.set(id, []);
     renderClientList();
+  }
+}
+
+// 上滑到顶部附近时加载更早的历史；用当前最旧消息的 timestamp 作为分页游标。
+// 内容在顶部插入，加载完成后把滚动位置往下补回新增的高度，保持视口内容不变。
+async function loadEarlierMessages(id) {
+  if (state.hasMoreOlder.get(id) === false) return;
+  if (state.loadingOlder.has(id)) return;
+  const list = state.messages.get(id);
+  if (!list || list.length === 0) return;
+  state.loadingOlder.add(id);
+  const el = els.timeline;
+  const prevHeight = el.scrollHeight;
+  const prevScroll = el.scrollTop;
+  try {
+    const before = list[0].timestamp;
+    const msgs = await invoke('load_messages', { sessionId: id, limit: 100, before });
+    if (msgs.length === 0) {
+      state.hasMoreOlder.set(id, false);
+      return;
+    }
+    list.unshift(...msgs.reverse());
+    state.hasMoreOlder.set(id, msgs.length >= 100);
+    renderTimeline();
+    renderProjectTree();
+    el.scrollTop = el.scrollHeight - prevHeight + prevScroll;
+  } catch (e) {
+    console.error('load earlier messages failed', e);
+  } finally {
+    state.loadingOlder.delete(id);
   }
 }
 
@@ -1246,11 +1280,14 @@ els.timelineSearch.addEventListener('keydown', (ev) => {
   if (el) el.scrollIntoView({ block: 'nearest' });
 });
 
-// 用户上滑查看历史时暂停自动滚动；回到底部后恢复。
+// 用户上滑查看历史时暂停自动滚动；回到底部后恢复。上滑到顶部附近时加载更早的消息。
 els.timeline.addEventListener('scroll', () => {
   const el = els.timeline;
   const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
   state.autoScroll = atBottom;
+  if (!atBottom && el.scrollTop <= 40 && state.selectedSessionId) {
+    loadEarlierMessages(state.selectedSessionId);
+  }
 });
 
 document.getElementById('btn-clear').addEventListener('click', clearMessages);
