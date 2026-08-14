@@ -26,3 +26,6 @@ Thumbs.db
 # Serena MCP tool local project config
 .serena/
 .omo
+
+# Claude Code local config
+.claude/
