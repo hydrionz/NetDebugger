@@ -79,7 +79,25 @@ pub async fn open_db(path: &str) -> Result<Connection> {
         .with_context(|| format!("open db at {}", path))?;
     run_migrations(&conn).await?;
     reset_all_sessions_to_idle(&conn).await?;
+    vacuum_if_needed(&conn).await?;
     Ok(conn)
+}
+
+/// 删除（如清空消息）只把数据页标记为可复用，文件停留在历史高水位。
+/// 启动时若空闲页占比 > 25% 则 VACUUM 压缩，否则跳过，避免每次启动重写整库。
+pub async fn vacuum_if_needed(conn: &Connection) -> Result<()> {
+    let (freelist, pages) = conn
+        .call(|conn| -> tokio_rusqlite::Result<(i64, i64)> {
+            let freelist = conn.query_row("PRAGMA freelist_count", [], |row| row.get(0))?;
+            let pages = conn.query_row("PRAGMA page_count", [], |row| row.get(0))?;
+            Ok((freelist, pages))
+        })
+        .await?;
+    if pages > 0 && freelist * 4 > pages {
+        conn.call(|conn| conn.execute_batch("VACUUM").map_err(tokio_rusqlite::Error::from))
+            .await?;
+    }
+    Ok(())
 }
 
 /// 应用启动时把所有会话状态重置为 idle，因为它们都没有在运行
