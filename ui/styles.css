@@ -883,6 +883,7 @@ body.resizing-h {
   color: var(--text-muted);
   text-align: center;
   padding-top: 40px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1503,3 +1504,25 @@ dialog select {
   background: var(--bg);
   color: var(--text);
 }
+
+/* 自定义滚动条：细条圆角，颜色随主题变量 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
