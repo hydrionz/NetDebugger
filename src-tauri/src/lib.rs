@@ -8,14 +8,20 @@ mod db;
 mod state;
 mod ws;
 
+// 从托盘/单例恢复窗口：最小化时仅 show() 无法还原，需先 unminimize
+fn restore_window(window: &tauri::WebviewWindow) {
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         // 单例：只允许一个实例；再次运行则激活已存在的窗口
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
+                restore_window(&window);
             }
         }))
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -114,8 +120,7 @@ pub fn run() {
                     .show_menu_on_left_click(false)
                     .on_menu_event(move |app, event| match event.id.as_ref() {
                         "show" => {
-                            let _ = window_for_tray.show();
-                            let _ = window_for_tray.set_focus();
+                            restore_window(&window_for_tray);
                         }
                         "quit" => {
                             app.exit(0);
@@ -132,8 +137,7 @@ pub fn run() {
                             if let Some(window) =
                                 tray.app_handle().get_webview_window("main")
                             {
-                                let _ = window.show();
-                                let _ = window.set_focus();
+                                restore_window(&window);
                             }
                         }
                     })
