@@ -15,6 +15,7 @@ const state = {
   searchQuery: '',
   searchHits: [],
   activeHitIndex: -1,
+  truncateMessages: true,  // 长消息截断显示（工具栏"截断"切换，localStorage 持久化）
   sendKeyMode: 'enter',  // 'enter' = Enter 发送/Shift+Enter 换行；'ctrlEnter' = Ctrl+Enter 发送/Enter 换行
   autoScroll: true,
   endpointDraft: [],
@@ -55,6 +56,7 @@ const els = {
   btnEndpointAdd: document.getElementById('btn-endpoint-add'),
   timelineSearch: document.getElementById('timeline-search'),
   btnSearchClear: document.getElementById('btn-search-clear'),
+  btnTruncateToggle: document.getElementById('btn-truncate-toggle'),
   settingsView: document.getElementById('dlg-settings'),
   settingMinimizeToTray: document.getElementById('setting-minimize-to-tray'),
   themeBtn: document.getElementById('btn-theme'),
@@ -144,7 +146,7 @@ function renderProjectTree() {
       <span class="project-toggle">▼</span>
       <span class="project-name">${escapeHtml(p.project.name)}</span>
       <span class="project-actions">
-        <button data-action="add-session" data-project="${p.project.id}" title="添加连接">+</button>
+        <button data-action="add-session" data-project="${p.project.id}" data-tip="添加连接">+</button>
       </span>
     `;
     header.addEventListener('click', (ev) => {
@@ -203,17 +205,17 @@ function renderProjectTree() {
         : '';
 
       const expander = hasEps
-        ? `<span class="session-expander" title="${collapsed ? '展开' : '折叠'}">${collapsed ? '▶' : '▼'}</span>`
+        ? `<span class="session-expander" data-tip="${collapsed ? '展开' : '折叠'}">${collapsed ? '▶' : '▼'}</span>`
         : '';
 
       item.innerHTML = `
         ${expander}
         <span class="session-type ${s.status}">${escapeHtml(typeLabel)}</span>
-        <span class="role-badge ${roleClass}" title="${roleTitle}">${escapeHtml(roleLabel)}</span>
+        <span class="role-badge ${roleClass}" data-tip="${roleTitle}">${escapeHtml(roleLabel)}</span>
         <span class="session-name">${escapeHtml(displayName)}</span>
         ${badge}
         <span class="session-actions">
-          <button data-action="${toggleAction}" data-session="${s.id}" class="${toggleClass}" title="${toggleTitle}">${toggleIcon}</button>
+          <button data-action="${toggleAction}" data-session="${s.id}" class="${toggleClass}" data-tip="${toggleTitle}">${toggleIcon}</button>
         </span>
       `;
       item.addEventListener('click', (ev) => {
@@ -371,6 +373,42 @@ function hideContextMenu() {
   }
 }
 
+// ===== 快速悬浮提示：原生 title 的延迟由系统控制（较慢），改用 data-tip 自定义提示，悬停立即显示 =====
+const tipEl = document.createElement('div');
+tipEl.className = 'tooltip hidden';
+document.body.appendChild(tipEl);
+
+function showTooltip(target) {
+  const text = target.dataset.tip;
+  if (!text) return;
+  tipEl.textContent = text;
+  tipEl.classList.remove('hidden');
+  const rect = target.getBoundingClientRect();
+  const w = tipEl.offsetWidth;
+  const h = tipEl.offsetHeight;
+  const cx = rect.left + rect.width / 2;
+  // 水平贴边夹紧；上方空间不足时翻到按钮下方
+  tipEl.style.left = Math.max(4 + w / 2, Math.min(cx, window.innerWidth - w / 2 - 4)) + 'px';
+  tipEl.style.top = (rect.top - h - 8 >= 4 ? rect.top - h - 8 : rect.bottom + 8) + 'px';
+  tipEl.style.transform = 'translate(-50%, 0)';
+}
+
+function hideTooltip() {
+  tipEl.classList.add('hidden');
+}
+
+document.addEventListener('mouseover', (e) => {
+  const target = e.target.closest('[data-tip]');
+  if (target) showTooltip(target);
+});
+document.addEventListener('mouseout', (e) => {
+  const tip = e.target.closest('[data-tip]');
+  if (!tip) return;
+  if (tip.contains(e.relatedTarget)) return; // 仍在同一元素内（子节点间移动）不隐藏
+  hideTooltip();
+});
+document.addEventListener('scroll', hideTooltip, true);
+
 // 转义后对命中的搜索词包裹 <mark> 高亮（大小写不敏感）。
 function highlightText(text, query) {
   const escaped = escapeHtml(text);
@@ -466,7 +504,7 @@ function renderEndpointList() {
   for (const ep of state.endpointDraft) {
     const row = document.createElement('div');
     row.className = 'endpoint-item';
-    row.innerHTML = `<span class="endpoint-path">${escapeHtml(ep)}</span><button type="button" class="endpoint-remove" title="删除">×</button>`;
+    row.innerHTML = `<span class="endpoint-path">${escapeHtml(ep)}</span><button type="button" class="endpoint-remove" data-tip="删除">×</button>`;
     row.querySelector('.endpoint-remove').addEventListener('click', () => {
       state.endpointDraft = state.endpointDraft.filter((x) => x !== ep);
       renderEndpointList();
@@ -604,7 +642,7 @@ async function stopSession(id) {
     <div>确定停止该连接吗？</div>
     <div class="confirm-session">
       <span class="session-type ${roleClass}">${escapeHtml(typeLabel)}</span>
-      <span class="role-badge ${roleClass}" title="${roleTitle}">${escapeHtml(roleLabel)}</span>
+      <span class="role-badge ${roleClass}" data-tip="${roleTitle}">${escapeHtml(roleLabel)}</span>
       <span>${escapeHtml(displayName)}</span>
     </div>
   `;
@@ -797,13 +835,15 @@ function renderTimeline() {
     const sender = m.direction === 'in' ? getSenderLabel(id, m) : '';
     const matchCount = hitCountById.get(m.id) || 0;
     const hitBadge = matchCount > 1
-      ? `<span class="msg-hit-count" title="本条消息共 ${matchCount} 处匹配">${matchCount} matches</span>`
+      ? `<span class="msg-hit-count" data-tip="本条消息共 ${matchCount} 处匹配">${matchCount} matches</span>`
       : '';
     // 搜索时把窗口锚定到首个命中段，让高亮落在可视区域内；
     // 无搜索或消息短于预算时保持原行为。
     const budget = 200;
     let displayText;
-    if (q) {
+    if (!state.truncateMessages) {
+      displayText = text;
+    } else if (q) {
       const lower = text.toLowerCase();
       const idx = lower.indexOf(q);
       if (idx === -1) {
@@ -997,7 +1037,7 @@ function renderClientList() {
     chip.className = 'client-chip' + (c.id === state.selectedClientId ? ' selected' : '');
     const label = c.name || c.remote_addr || c.id.slice(0, 8);
     const ep = c.endpoint ? `<span class="client-ep">${escapeHtml(c.endpoint)}</span>` : '';
-    chip.innerHTML = `<span class="client-label">${escapeHtml(label)}</span>${ep}<span class="client-actions"><span class="rename-hint" title="重命名">✎</span><span class="disconnect-hint" title="断开连接">×</span></span>`;
+    chip.innerHTML = `<span class="client-label">${escapeHtml(label)}</span>${ep}<span class="client-actions"><span class="rename-hint" data-tip="重命名">✎</span><span class="disconnect-hint" data-tip="断开连接">×</span></span>`;
     chip.querySelector('.client-label').addEventListener('click', (ev) => {
       ev.stopPropagation();
       state.selectedClientId = c.id;
@@ -1192,6 +1232,28 @@ els.timeline.addEventListener('scroll', () => {
 });
 
 document.getElementById('btn-clear').addEventListener('click', clearMessages);
+
+function initTruncateToggle() {
+  try {
+    const saved = localStorage.getItem('truncate-messages');
+    if (saved === 'false') state.truncateMessages = false;
+  } catch { /* ignore */ }
+  updateTruncateToggleUI();
+  els.btnTruncateToggle.addEventListener('click', () => {
+    state.truncateMessages = !state.truncateMessages;
+    try { localStorage.setItem('truncate-messages', String(state.truncateMessages)); } catch { /* ignore */ }
+    updateTruncateToggleUI();
+    renderTimeline();
+  });
+}
+
+function updateTruncateToggleUI() {
+  els.btnTruncateToggle.classList.toggle('active', state.truncateMessages);
+  els.btnTruncateToggle.setAttribute('aria-pressed', String(state.truncateMessages));
+  els.btnTruncateToggle.dataset.tip = state.truncateMessages
+    ? '长消息截断显示（点击显示完整消息）'
+    : '显示完整消息（点击截断长消息）';
+}
 
 document.getElementById('btn-settings').addEventListener('click', openSettingsView);
 
@@ -1702,6 +1764,7 @@ async function initTheme() {
   initThemePicker();
   initSettingsMenu();
   initSendKeyMode();
+  initTruncateToggle();
   // 加载版本号并填充标题栏与关于页（版本号单点维护于 Cargo.toml）
   try {
     const v = await invoke('get_app_version');

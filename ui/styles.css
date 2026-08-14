@@ -1273,6 +1273,17 @@ dialog select {
   padding: 2px 10px;
 }
 
+.truncate-toggle {
+  padding: 2px 8px;
+  color: var(--text-muted);
+}
+
+.truncate-toggle.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--selected-bg);
+}
+
 #timeline-filter {
   font-size: 11px;
   padding: 2px 6px;
@@ -1335,6 +1346,23 @@ dialog select {
 .toast-hide {
   opacity: 0;
   transform: translateY(-6px);
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 99999;
+  background: #333;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .message-body mark,

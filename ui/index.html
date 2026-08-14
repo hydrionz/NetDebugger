@@ -14,9 +14,9 @@
       <span class="titlebar-version" id="app-version"></span>
       <div class="titlebar-spacer"></div>
       <div class="titlebar-controls">
-        <button id="btn-win-min" class="win-btn" title="最小化">─</button>
-        <button id="btn-win-max" class="win-btn" title="最大化/还原">□</button>
-        <button id="btn-win-close" class="win-btn win-btn-close" title="关闭">✕</button>
+        <button id="btn-win-min" class="win-btn" data-tip="最小化" aria-label="最小化">─</button>
+        <button id="btn-win-max" class="win-btn" data-tip="最大化/还原" aria-label="最大化/还原">□</button>
+        <button id="btn-win-close" class="win-btn win-btn-close" data-tip="关闭" aria-label="关闭">✕</button>
       </div>
     </header>
     <header class="toolbar">
@@ -24,7 +24,7 @@
       <button id="btn-new-session">+ 连接</button>
       <div class="spacer"></div>
       <div class="theme-picker">
-        <button id="btn-theme" class="icon-btn" title="切换主题" aria-label="切换主题">
+        <button id="btn-theme" class="icon-btn" data-tip="切换主题" aria-label="切换主题">
           <svg id="theme-icon-current" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
           </svg>
@@ -52,7 +52,7 @@
           </div>
         </div>
       </div>
-      <button id="btn-settings" class="icon-btn" title="设置" aria-label="设置">
+      <button id="btn-settings" class="icon-btn" data-tip="设置" aria-label="设置">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -64,7 +64,7 @@
       <aside class="sidebar" id="sidebar">
         <div id="project-tree"></div>
       </aside>
-      <div class="splitter splitter-v" id="splitter-sidebar" title="拖动调整宽度"></div>
+      <div class="splitter splitter-v" id="splitter-sidebar" data-tip="拖动调整宽度"></div>
 
       <div id="content-area" class="content-area">
         <div class="no-selection-placeholder">
@@ -83,10 +83,18 @@
           <div class="timeline-toolbar hidden">
             <div class="search-wrap">
               <input type="text" id="timeline-search" placeholder="搜索消息..." />
-              <button id="btn-search-clear" class="search-clear" type="button" title="清空搜索" aria-label="清空搜索">×</button>
+              <button id="btn-search-clear" class="search-clear" type="button" data-tip="清空搜索" aria-label="清空搜索">×</button>
             </div>
             <div class="spacer"></div>
-            <button id="btn-clear" class="icon-btn" title="清空当前会话的消息记录" aria-label="清空">
+            <button id="btn-truncate-toggle" class="icon-btn truncate-toggle" type="button" data-tip="长消息截断显示（点击切换）" aria-label="长消息截断" aria-pressed="true">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3"/>
+                <path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
+                <path d="M3 16h3a2 2 0 0 1 2 2v3"/>
+                <path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+              </svg>
+            </button>
+            <button id="btn-clear" class="icon-btn" data-tip="清空当前会话的消息记录" aria-label="清空">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 6h18"/>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -95,11 +103,11 @@
             </button>
           </div>
           <div id="timeline" class="timeline"></div>
-          <div class="splitter splitter-h" id="splitter-send" title="拖动调整高度"></div>
+          <div class="splitter splitter-h" id="splitter-send" data-tip="拖动调整高度"></div>
           <div class="send-area" id="send-area">
             <div class="send-row">
               <label>目标: <select id="send-target"></select></label>
-              <button id="btn-send" class="send-btn" title="发送" aria-label="发送">
+              <button id="btn-send" class="send-btn" data-tip="发送" aria-label="发送">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none">
                   <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
                 </svg>
@@ -109,7 +117,7 @@
           </div>
         </section>
 
-        <div class="splitter splitter-v" id="splitter-detail" title="拖动调整宽度"></div>
+        <div class="splitter splitter-v" id="splitter-detail" data-tip="拖动调整宽度"></div>
         <aside class="detail-pane" id="detail-pane">
           <div id="detail-empty" class="detail-empty">
             <div class="detail-empty-icon">📋</div>
@@ -124,7 +132,7 @@
               <button data-tab="json">JSON</button>
               <button data-tab="hex">十六进制</button>
               <span class="detail-tabs-spacer"></span>
-              <button id="btn-copy-message" class="copy-btn" title="复制消息内容">⧉</button>
+              <button id="btn-copy-message" class="copy-btn" data-tip="复制消息内容" aria-label="复制消息内容">⧉</button>
             </div>
             <pre id="detail-body"></pre>
           </div>
