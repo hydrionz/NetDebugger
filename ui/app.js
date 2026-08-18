@@ -21,6 +21,8 @@ const state = {
   hasMoreOlder: new Map(),  // sessionId → 是否还有更早的历史可加载
   loadingOlder: new Set(),  // 正在加载更早历史的 sessionId
   endpointDraft: [],
+  headerDraft: [],
+  subprotocolDraft: [],
 };
 
 const els = {
@@ -56,6 +58,13 @@ const els = {
   endpointList: document.getElementById('endpoint-list'),
   endpointInput: document.getElementById('endpoint-input'),
   btnEndpointAdd: document.getElementById('btn-endpoint-add'),
+  headerList: document.getElementById('header-list'),
+  headerKeyInput: document.getElementById('header-key-input'),
+  headerValueInput: document.getElementById('header-value-input'),
+  btnHeaderAdd: document.getElementById('btn-header-add'),
+  subprotocolList: document.getElementById('subprotocol-list'),
+  subprotocolInput: document.getElementById('subprotocol-input'),
+  btnSubprotocolAdd: document.getElementById('btn-subprotocol-add'),
   timelineSearch: document.getElementById('timeline-search'),
   btnSearchClear: document.getElementById('btn-search-clear'),
   btnTruncateToggle: document.getElementById('btn-truncate-toggle'),
@@ -456,6 +465,10 @@ function openSessionDialog(projectId) {
   els.sessionClientEndpoint.value = '';
   state.endpointDraft = [];
   renderEndpointList();
+  state.headerDraft = [];
+  renderHeaderList();
+  state.subprotocolDraft = [];
+  renderSubprotocolList();
   els.sessionServerConfig.classList.remove('hidden');
   els.sessionClientConfig.classList.add('hidden');
   els.dlgSession.showModal();
@@ -483,6 +496,10 @@ function openEditSessionDialog(session) {
     els.sessionPort.value = '8080';
     // 目标地址回显：去掉 ws:// 前缀，只显示 host:port（若历史数据带前缀则剥掉）
     els.sessionUrl.value = stripWsPrefix(session.target_url || '');
+    state.headerDraft = Object.entries(session.headers || {}).map(([key, value]) => ({ key, value }));
+    renderHeaderList();
+    state.subprotocolDraft = (session.subprotocols || []).slice();
+    renderSubprotocolList();
     els.sessionServerConfig.classList.add('hidden');
     els.sessionClientConfig.classList.remove('hidden');
   }
@@ -522,6 +539,62 @@ function addEndpointFromInput() {
   state.endpointDraft.push(val);
   els.endpointInput.value = '';
   renderEndpointList();
+}
+
+function renderHeaderList() {
+  els.headerList.innerHTML = '';
+  for (const h of state.headerDraft) {
+    const row = document.createElement('div');
+    row.className = 'header-item';
+    row.innerHTML = `<span class="header-key">${escapeHtml(h.key)}</span><span class="header-value">${escapeHtml(h.value)}</span><button type="button" class="endpoint-remove" data-tip="删除">×</button>`;
+    row.querySelector('.endpoint-remove').addEventListener('click', () => {
+      state.headerDraft = state.headerDraft.filter((x) => x !== h);
+      renderHeaderList();
+    });
+    els.headerList.appendChild(row);
+  }
+}
+
+function addHeaderFromInput() {
+  const key = els.headerKeyInput.value.trim();
+  const value = els.headerValueInput.value.trim();
+  if (!key) return;
+  if (key.includes(':') || /\s/.test(key) || /[\x00-\x1f]/.test(key)) {
+    showError('Header 名含非法字符（不能含 :、空白或控制字符）');
+    return;
+  }
+  if (state.headerDraft.some((h) => h.key === key)) return;
+  state.headerDraft.push({ key, value });
+  els.headerKeyInput.value = '';
+  els.headerValueInput.value = '';
+  renderHeaderList();
+}
+
+function renderSubprotocolList() {
+  els.subprotocolList.innerHTML = '';
+  for (const p of state.subprotocolDraft) {
+    const row = document.createElement('div');
+    row.className = 'endpoint-item';
+    row.innerHTML = `<span class="endpoint-path">${escapeHtml(p)}</span><button type="button" class="endpoint-remove" data-tip="删除">×</button>`;
+    row.querySelector('.endpoint-remove').addEventListener('click', () => {
+      state.subprotocolDraft = state.subprotocolDraft.filter((x) => x !== p);
+      renderSubprotocolList();
+    });
+    els.subprotocolList.appendChild(row);
+  }
+}
+
+function addSubprotocolFromInput() {
+  const val = els.subprotocolInput.value.trim();
+  if (!val) return;
+  if (val.includes(',') || /\s/.test(val) || /[\x00-\x1f]/.test(val)) {
+    showError('Subprotocol 含非法字符（不能含 ,、空白或控制字符）');
+    return;
+  }
+  if (state.subprotocolDraft.includes(val)) return;
+  state.subprotocolDraft.push(val);
+  els.subprotocolInput.value = '';
+  renderSubprotocolList();
 }
 
 async function saveProject() {
@@ -584,6 +657,8 @@ async function saveSession() {
     bind_addr: isServer ? (port ? '0.0.0.0:' + port : null) : null,
     target_url: targetUrl || null,
     endpoints,
+    headers: isServer || !state.headerDraft.length ? null : Object.fromEntries(state.headerDraft.map((h) => [h.key, h.value])),
+    subprotocols: isServer || !state.subprotocolDraft.length ? null : state.subprotocolDraft.slice(),
   };
   try {
     if (editId) {
@@ -1242,6 +1317,28 @@ els.endpointInput.addEventListener('keydown', (ev) => {
   if (ev.key === 'Enter') {
     ev.preventDefault();
     addEndpointFromInput();
+  }
+});
+
+els.btnHeaderAdd.addEventListener('click', addHeaderFromInput);
+els.headerKeyInput.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    els.headerValueInput.focus();
+  }
+});
+els.headerValueInput.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    addHeaderFromInput();
+  }
+});
+
+els.btnSubprotocolAdd.addEventListener('click', addSubprotocolFromInput);
+els.subprotocolInput.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    addSubprotocolFromInput();
   }
 });
 

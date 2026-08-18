@@ -180,6 +180,23 @@
       <div id="session-client-config" class="hidden">
         <label>目标地址: <input type="text" id="session-url" placeholder="如 127.0.0.1:8080（只填地址端口）" value="127.0.0.1:8080" /></label>
         <label>Endpoint 路径: <input type="text" id="session-client-endpoint" placeholder="如 /echo（可选，拼接到目标地址后）" /></label>
+        <div class="endpoint-list-editor">
+          <div class="endpoint-list-title">自定义请求头（握手时发送）</div>
+          <div id="header-list" class="endpoint-list"></div>
+          <div class="header-add-row">
+            <input type="text" id="header-key-input" placeholder="Header 名 (如 Authorization)" />
+            <input type="text" id="header-value-input" placeholder="值 (如 Bearer xxx)" />
+            <button type="button" id="btn-header-add">添加</button>
+          </div>
+        </div>
+        <div class="endpoint-list-editor">
+          <div class="endpoint-list-title">Subprotocol（Sec-WebSocket-Protocol）</div>
+          <div id="subprotocol-list" class="endpoint-list"></div>
+          <div class="endpoint-add-row">
+            <input type="text" id="subprotocol-input" placeholder="如 graphql-ws" />
+            <button type="button" id="btn-subprotocol-add">添加</button>
+          </div>
+        </div>
       </div>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>取消</button>

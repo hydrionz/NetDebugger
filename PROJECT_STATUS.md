@@ -1,7 +1,7 @@
 # NetDebugger 项目状态归档
 
 > 本文档记录 NetDebugger 的当前状态、已实现功能、待办事项及技术债务。开发规则见 [AGENTS.md](AGENTS.md)。
-> 最后更新：2026-08-14（待办补充常用调试功能清单及实现方案）
+> 最后更新：2026-08-18（实现自定义请求头 / 子协议）
 
 ---
 
@@ -22,6 +22,7 @@
 
 - [x] WS 服务端 / 客户端模拟；WS Server 多客户端 + 多 endpoint 路径（握手按路径路由、未知路径 404、按 endpoint 定向广播）
 - [x] 消息发送目标：全体广播 / 某 endpoint 全体广播 / 指定客户端（当前仅支持发送文本）
+- [x] 客户端自定义请求头（握手时发送，如 Authorization / Origin / X-Foo）与 Subprotocol（`Sec-WebSocket-Protocol` 多选，逗号分隔合并）
 - [x] 项目分组管理；会话可独立或归组；连接自定义命名、编辑（运行中禁止编辑，协议/角色创建后锁定）
 - [x] 客户端一个连接对应一个 endpoint（目标地址只填 host:port，endpoint 拼接到 URL）
 - [x] 服务端监听地址只填端口，自动绑定 `0.0.0.0:端口`（连接树显示 `WS Server 0.0.0.0:port`）
@@ -65,7 +66,6 @@
 
 ### 高优先级
 
-- [ ] **自定义请求头 / 子协议**：会话配置加请求头列表（键值对编辑器，样式参考 endpoint 列表），sessions 表加 `headers` JSON 列（迁移）；客户端连接时构造 `http::Request` 写入自定义头（Origin / Cookie / Token 等）与 `Sec-WebSocket-Protocol` 子协议，再交给 `connect_async`
 - [ ] **常用消息模板 / 收藏**：纯前端；localStorage 存模板数组（名称 + 内容），发送区加模板下拉与「存为模板」按钮，点击填入发送框
 - [ ] **消息重发**：右键已发送消息菜单加「重发」；前端复用发送逻辑——客户端会话发回原 endpoint，服务端会话发到该消息记录的 endpoint/client_id
 - [ ] **二进制发送（hex / base64）**：发送区加输入模式切换；前端把 hex/base64 文本转 `Uint8Array`，后端 send 相关命令（多播/指定客户端）支持 `Message::Binary`（当前仅文本）

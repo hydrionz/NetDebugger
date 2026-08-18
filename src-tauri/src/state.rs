@@ -9,6 +9,8 @@ pub struct WsConfig {
     pub bind_addr: Option<String>,
     pub target_url: Option<String>,
     pub endpoints: Option<Vec<String>>,
+    pub headers: Option<HashMap<String, String>>,
+    pub subprotocols: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]

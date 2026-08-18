@@ -2,6 +2,7 @@ use crate::db;
 use crate::state::{AppState, ClientMessage, OutgoingKind, OutgoingMessage, SessionHandle, TimelineEvent, WsConfig};
 use crate::ws;
 use serde_json::json;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{ipc::Channel, AppHandle, State};
 use tauri_plugin_store::StoreExt;
@@ -15,6 +16,8 @@ pub struct CreateSessionRequest {
     bind_addr: Option<String>,
     target_url: Option<String>,
     endpoints: Option<Vec<String>>,
+    headers: Option<HashMap<String, String>>,
+    subprotocols: Option<Vec<String>>,
 }
 
 #[tauri::command]
@@ -51,6 +54,8 @@ pub async fn create_session(
     req: CreateSessionRequest,
 ) -> Result<db::Session, String> {
     let endpoints = normalize_endpoints(req.endpoints)?;
+    let headers = normalize_headers(req.headers)?;
+    let subprotocols = normalize_subprotocols(req.subprotocols)?;
     db::create_session(
         &state.db,
         req.project_id.as_deref(),
@@ -60,6 +65,8 @@ pub async fn create_session(
         req.bind_addr,
         req.target_url,
         endpoints,
+        headers,
+        subprotocols,
     )
     .await
     .map_err(|e| e.to_string())
@@ -73,6 +80,8 @@ pub struct UpdateSessionRequest {
     bind_addr: Option<String>,
     target_url: Option<String>,
     endpoints: Option<Vec<String>>,
+    headers: Option<HashMap<String, String>>,
+    subprotocols: Option<Vec<String>>,
 }
 
 /// 校验并规范化 endpoint 路径列表：trim、跳过空串、必须 / 开头、无空白与 ?#、去重保序；全空 → None。
@@ -86,6 +95,37 @@ fn normalize_endpoints(eps: Option<Vec<String>>) -> Result<Option<Vec<String>>, 
         if !p.starts_with('/') { return Err(format!("endpoint 路径必须以 / 开头: {}", p)); }
         if p.contains(char::is_whitespace) || p.contains('?') || p.contains('#') {
             return Err(format!("endpoint 路径含非法字符: {}", p));
+        }
+        if seen.insert(p.clone()) { out.push(p); }
+    }
+    Ok(if out.is_empty() { None } else { Some(out) })
+}
+
+/// 校验并规范化请求头：key trim 跳过空；key 不含 :/空白/控制字符；value trim 保留可空。
+fn normalize_headers(hdrs: Option<HashMap<String, String>>) -> Result<Option<HashMap<String, String>>, String> {
+    let Some(map) = hdrs else { return Ok(None) };
+    let mut out = HashMap::new();
+    for (mut k, v) in map {
+        k = k.trim().to_string();
+        if k.is_empty() { continue; }
+        if k.contains(':') || k.contains(char::is_whitespace) || k.contains(char::is_control) {
+            return Err(format!("header 名含非法字符: {}", k));
+        }
+        out.insert(k, v.trim().to_string());
+    }
+    Ok(if out.is_empty() { None } else { Some(out) })
+}
+
+/// 校验并规范化 subprotocol 列表：trim 跳过空；不含 ,/空白/控制字符；按序去重。
+fn normalize_subprotocols(protos: Option<Vec<String>>) -> Result<Option<Vec<String>>, String> {
+    let Some(list) = protos else { return Ok(None) };
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for raw in list {
+        let p = raw.trim().to_string();
+        if p.is_empty() { continue; }
+        if p.contains(',') || p.contains(char::is_whitespace) || p.contains(char::is_control) {
+            return Err(format!("subprotocol 含非法字符: {}", p));
         }
         if seen.insert(p.clone()) { out.push(p); }
     }
@@ -111,6 +151,8 @@ pub async fn update_session(
     }
 
     let endpoints = normalize_endpoints(req.endpoints)?;
+    let headers = normalize_headers(req.headers)?;
+    let subprotocols = normalize_subprotocols(req.subprotocols)?;
     db::update_session(
         &state.db,
         &req.id,
@@ -119,6 +161,8 @@ pub async fn update_session(
         req.bind_addr,
         req.target_url,
         endpoints,
+        headers,
+        subprotocols,
     )
     .await
     .map_err(|e| e.to_string())
@@ -174,6 +218,8 @@ pub async fn start_session(
         bind_addr: session.bind_addr.clone(),
         target_url: session.target_url.clone(),
         endpoints: session.endpoints.clone(),
+        headers: session.headers.clone(),
+        subprotocols: session.subprotocols.clone(),
     };
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::mpsc::channel::<()>(1);

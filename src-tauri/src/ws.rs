@@ -6,6 +6,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tokio_tungstenite::{accept_hdr_async, connect_async, tungstenite::protocol::Message as WsMessage};
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::{HeaderName, HeaderValue};
 use uuid::Uuid;
 
 /// 判定握手路径是否被接受。None 配置 = accept-all（仍返回真实路径用于打标）；已配置则精确匹配，Err 表示拒绝。
@@ -339,7 +341,30 @@ pub async fn run_ws_client(
         .ok();
     emit_status(&app, &session_id, "starting", None, None);
 
-    let (ws_stream, _response) = match connect_async(&url).await {
+    let mut request = match url.as_str().into_client_request() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("ws client build request error: {}", e);
+            emit_error(&app, &session_id, &format!("构建连接请求失败：{}", e));
+            set_closed(&app, &db, &session_id, None, None).await;
+            remove_session_handle(&app, &session_id).await;
+            return;
+        }
+    };
+    let headers = request.headers_mut();
+    for (k, v) in config.headers.as_ref().into_iter().flatten() {
+        if let (Ok(name), Ok(val)) = (HeaderName::from_bytes(k.as_bytes()), HeaderValue::from_str(v)) {
+            headers.append(name, val);
+        }
+    }
+    if let Some(protos) = &config.subprotocols {
+        if !protos.is_empty() {
+            if let Ok(val) = HeaderValue::from_str(&protos.join(", ")) {
+                headers.append(HeaderName::from_static("sec-websocket-protocol"), val);
+            }
+        }
+    }
+    let (ws_stream, _response) = match connect_async(request).await {
         Ok(x) => x,
         Err(e) => {
             eprintln!("ws client connect error: {}", e);
