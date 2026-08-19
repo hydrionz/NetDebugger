@@ -2184,6 +2184,29 @@ function initSplitters() {
     layout.minSendH, Math.round(window.innerHeight * 0.5), true);
 }
 
+// ─── 自动更新 ───
+async function checkForUpdates() {
+  const statusEl = document.getElementById('update-status');
+  if (!statusEl) return;
+  statusEl.textContent = '正在检查更新…';
+  try {
+    const { check } = window.__TAURI__.updater;
+    const update = await check();
+    if (update) {
+      statusEl.innerHTML = `发现新版本 <b>${update.version}</b>，正在下载…`;
+      await update.downloadAndInstall();
+      statusEl.textContent = '更新完成，重启后生效。';
+    } else {
+      statusEl.textContent = '当前已是最新版本。';
+    }
+  } catch (e) {
+    statusEl.textContent = '检查更新失败：' + e;
+    console.error('checkForUpdates failed', e);
+  }
+}
+
+document.getElementById('btn-check-update')?.addEventListener('click', checkForUpdates);
+
 // 加载主题设置
 async function initTheme() {
   try {
