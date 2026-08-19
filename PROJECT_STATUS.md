@@ -1,7 +1,7 @@
 # NetDebugger 项目状态归档
 
 > 本文档记录 NetDebugger 的当前状态、已实现功能、待办事项及技术债务。开发规则见 [AGENTS.md](AGENTS.md)。
-> 最后更新：2026-08-18（实现常用消息模板 / 收藏）
+> 最后更新：2026-08-19（自动更新、CI/CD、UI 重构）
 
 ---
 
@@ -10,7 +10,7 @@
 **名称**：NetDebugger
 **定位**：跨平台网络协议调试器（Tauri v2 + Rust + 原生 HTML/CSS/JS），当前以 WebSocket 调试为主
 
-**技术栈**：Tauri v2 · Tokio · tokio-tungstenite · SQLite (tokio-rusqlite) · tauri-plugin-store · tauri-plugin-single-instance
+**技术栈**：Tauri v2 · Tokio · tokio-tungstenite · SQLite (tokio-rusqlite) · tauri-plugin-store · tauri-plugin-single-instance · tauri-plugin-updater
 
 **版本**：单点维护于 `src-tauri/Cargo.toml`（`version` 字段）；标题栏 / 欢迎页 / 关于页 / 构建产物名（`NetDebugger_v<版本>.exe`）统一读取
 
@@ -50,6 +50,16 @@
 - [x] 关闭按钮遵循"关闭后最小化到系统托盘"设置（勾选则直接隐藏，否则弹确认框）
 - [x] 消息列表长消息截断开关（工具栏图标切换）；自定义即时悬浮提示（悬停立即显示按钮说明）
 - [x] 自定义滚动条样式（细条圆角、颜色随主题），空详情栏不显示滚动条
+- [x] 标题栏集成：检查更新（旋转加载动画 + 红点角标）、切换主题、设置按钮，均位于最小化左侧
+- [x] 侧边栏工具栏："+ 分组"和"+ 连接"按钮置于左侧连接列表顶部
+- [x] 发送区清空按钮：垃圾桶图标，鼠标悬停变红，与清空消息记录按钮样式一致
+
+### 2.3 自动更新与 CI/CD
+
+- [x] GitHub Actions 自动构建：推送 `v*` 标签触发 Windows + macOS 双平台构建并发布到 GitHub Releases
+- [x] Tauri 签名更新：生成签名密钥，构建产物自动签名，`latest.json` 包含各平台签名信息
+- [x] 应用内自动更新（tauri-plugin-updater）：启动时静默检查 + 每 30 分钟定时检查；手动检查时标题栏图标旋转加载，有更新显示红点角标
+- [x] 更新弹框：已是最新显示当前版本号 + 关闭按钮；发现新版本显示版本对比 + 更新按钮，点击自动下载安装
 
 ---
 

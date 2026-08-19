@@ -1294,6 +1294,7 @@ els.sessionRole.addEventListener('change', () => {
 });
 
 document.getElementById('btn-send').addEventListener('click', sendMessage);
+document.getElementById('btn-clear-input').addEventListener('click', () => { els.sendInput.value = ''; els.sendInput.focus(); });
 
 // 发送键模式：'enter' = Enter 发送、Shift+Enter 换行（聊天风格，默认）；
 // 'ctrlEnter' = Ctrl+Enter 发送、Enter 换行（编辑器风格）。

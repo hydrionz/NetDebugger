@@ -372,7 +372,8 @@ button.primary:hover {
 .tpl-resize-se { bottom: 0; right: 0; }
 .tpl-resize-nw { top: 0; left: 0; }
 
-#btn-clear:hover {
+#btn-clear:hover,
+#btn-clear-input:hover {
   color: var(--error);
 }
 
