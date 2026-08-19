@@ -556,6 +556,14 @@ body.resizing-h {
   padding: 8px;
 }
 
+.sidebar-toolbar {
+  display: flex;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
 .content-area {
   flex: 1;
   display: flex;
