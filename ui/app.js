@@ -2226,8 +2226,6 @@ function showUpdateDialog(currentVersion, newVersion) {
 }
 
 async function checkForUpdates(silent = false) {
-  const statusEl = document.getElementById('update-status');
-  if (statusEl && !silent) statusEl.textContent = '正在检查更新…';
   let currentVersion = '';
   try {
     currentVersion = await invoke('get_app_version');
@@ -2241,9 +2239,7 @@ async function checkForUpdates(silent = false) {
       if (!silent) {
         const action = await showUpdateDialog(currentVersion, update.version);
         if (action === 'update') {
-          if (statusEl) statusEl.textContent = '正在下载更新…';
           await update.downloadAndInstall();
-          if (statusEl) statusEl.textContent = '更新完成，重启后生效。';
         }
       }
     } else {
@@ -2251,7 +2247,7 @@ async function checkForUpdates(silent = false) {
       if (!silent) await showUpdateDialog(currentVersion, null);
     }
   } catch (e) {
-    if (statusEl && !silent) statusEl.textContent = '检查更新失败：' + e;
+    if (!silent) showError('检查更新失败：' + e);
     console.error('checkForUpdates failed', e);
   }
 }
@@ -2291,6 +2287,7 @@ async function initTheme() {
     console.error('get_app_version failed', e);
   }
   window.__TAURI__.window.getCurrentWindow().show();
-  // 启动后静默检查更新
+  // 启动后静默检查更新，之后每 30 分钟检查一次
   checkForUpdates(true);
+  setInterval(() => checkForUpdates(true), 30 * 60 * 1000);
 })();
