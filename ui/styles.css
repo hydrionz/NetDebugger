@@ -804,12 +804,15 @@ body.resizing-h {
 
 .project-actions {
   margin-left: auto;
-  display: none;
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
   gap: 4px;
 }
 
 .project-header:hover .project-actions {
-  display: flex;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .session-list {
