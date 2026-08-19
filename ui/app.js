@@ -2184,6 +2184,16 @@ function initSplitters() {
     layout.minSendH, Math.round(window.innerHeight * 0.5), true);
 }
 
+const ICON_UPDATE = `<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>`;
+const ICON_SPINNING = `<path d="M21 12a9 9 0 1 1-6.219-8.56"/>`;
+
+function setUpdateIcon(spinning) {
+  const svg = document.getElementById('icon-update');
+  if (!svg) return;
+  svg.classList.toggle('spinning', spinning);
+  svg.innerHTML = spinning ? ICON_SPINNING : ICON_UPDATE;
+}
+
 // ─── 自动更新 ───
 let hasUpdate = false;
 
@@ -2226,6 +2236,8 @@ function showUpdateDialog(currentVersion, newVersion) {
 }
 
 async function checkForUpdates(silent = false) {
+  if (!silent) setUpdateIcon(true);
+
   let currentVersion = '';
   try {
     currentVersion = await invoke('get_app_version');
@@ -2234,6 +2246,7 @@ async function checkForUpdates(silent = false) {
   try {
     const { check } = window.__TAURI__.updater;
     const update = await check();
+    if (!silent) setUpdateIcon(false);
     if (update) {
       showUpdateBadge(true);
       if (!silent) {
@@ -2247,6 +2260,7 @@ async function checkForUpdates(silent = false) {
       if (!silent) await showUpdateDialog(currentVersion, null);
     }
   } catch (e) {
+    if (!silent) setUpdateIcon(false);
     if (!silent) showError('检查更新失败：' + e);
     console.error('checkForUpdates failed', e);
   }
