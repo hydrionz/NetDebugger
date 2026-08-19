@@ -209,8 +209,8 @@ function renderProjectTree() {
       const roleClass = s.role === 'server' ? 'role-server' : 'role-client';
       const roleTitle = s.role === 'server' ? '服务端' : '客户端';
       const displayName = s.name || (s.role === 'server'
-        ? `WS Server ${s.bind_addr || ':?'}`
-        : `WS Client ${s.target_url || '?'}`);
+        ? s.bind_addr || ':?'
+        : s.target_url || '?');
 
       const isRunning = s.status === 'running' || s.status === 'starting';
       const toggleAction = isRunning ? 'stop' : 'start';
@@ -723,8 +723,8 @@ async function stopSession(id) {
   const roleClass = s.role === 'server' ? 'role-server' : 'role-client';
   const roleTitle = s.role === 'server' ? '服务端' : '客户端';
   const displayName = s.name || (s.role === 'server'
-    ? `WS Server ${s.bind_addr || ':?'}`
-    : `WS Client ${s.target_url || '?'}`);
+    ? s.bind_addr || ':?'
+    : s.target_url || '?');
   const html = `
     <div>确定停止该连接吗？</div>
     <div class="confirm-session">
