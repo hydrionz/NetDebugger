@@ -1,11 +1,10 @@
 [package]
 name = "app"
-version = "0.1.1"
+version = "0.1.2"
 description = "Cross-platform network protocol debugger"
 authors = ["zz"]
 license = "Apache-2.0"
-# TODO: 上传到 GitHub 后填写仓库地址，如 https://github.com/<用户名>/<仓库名>
-# repository = "https://github.com/<用户名>/<仓库名>"
+repository = "https://github.com/hydrionz/NetDebugger"
 edition = "2021"
 rust-version = "1.77.2"
 
