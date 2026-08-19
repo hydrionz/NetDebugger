@@ -147,6 +147,8 @@ button.primary:hover {
 
 .theme-picker {
   position: relative;
+  display: flex;
+  align-items: stretch;
 }
 
 .theme-menu {
@@ -417,6 +419,7 @@ button.danger:hover {
   border-bottom: 1px solid var(--border);
   user-select: none;
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .titlebar-title {
@@ -448,7 +451,9 @@ button.danger:hover {
 
 .titlebar-controls {
   display: flex;
+  align-items: stretch;
   height: 100%;
+  overflow: visible;
 }
 
 .win-btn {

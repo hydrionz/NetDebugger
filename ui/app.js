@@ -2065,7 +2065,7 @@ document.addEventListener('contextmenu', (e) => e.preventDefault());
   if (dragBar) {
     dragBar.addEventListener('mousedown', (e) => {
       if (e.buttons !== 1) return;
-      if (e.target.closest('button')) return;
+      if (e.target.closest('button, .theme-menu, .tpl-menu, input, select, textarea')) return;
       if (e.detail === 2) {
         win.toggleMaximize().catch(() => {});
       } else {
