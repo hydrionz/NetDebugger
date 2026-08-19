@@ -2185,27 +2185,79 @@ function initSplitters() {
 }
 
 // ─── 自动更新 ───
-async function checkForUpdates() {
+let hasUpdate = false;
+
+function showUpdateBadge(visible) {
+  hasUpdate = visible;
+  const badge = document.getElementById('update-badge');
+  if (badge) badge.classList.toggle('hidden', !visible);
+}
+
+function showUpdateDialog(currentVersion, newVersion) {
+  const dlg = document.getElementById('dlg-update');
+  const msgEl = document.getElementById('dlg-update-message');
+  const btnClose = document.getElementById('btn-update-close');
+  const btnApply = document.getElementById('btn-update-apply');
+
+  if (newVersion) {
+    msgEl.innerHTML = `发现新版本\n\n当前版本：v${currentVersion}\n最新版本：v${newVersion}`;
+    btnApply.classList.remove('hidden');
+  } else {
+    msgEl.innerHTML = `当前已是最新版本\n\nv${currentVersion}`;
+    btnApply.classList.add('hidden');
+  }
+
+  return new Promise((resolve) => {
+    const cleanup = () => {
+      btnClose.removeEventListener('click', onClose);
+      btnApply.removeEventListener('click', onApply);
+      dlg.removeEventListener('click', onBackdrop);
+      dlg.close();
+    };
+    const onClose = () => { cleanup(); resolve(); };
+    const onApply = () => { cleanup(); resolve('update'); };
+    const onBackdrop = (e) => { if (e.target === dlg) onClose(); };
+
+    btnClose.addEventListener('click', onClose);
+    btnApply.addEventListener('click', onApply);
+    dlg.addEventListener('click', onBackdrop);
+    dlg.showModal();
+  });
+}
+
+async function checkForUpdates(silent = false) {
   const statusEl = document.getElementById('update-status');
-  if (!statusEl) return;
-  statusEl.textContent = '正在检查更新…';
+  if (statusEl && !silent) statusEl.textContent = '正在检查更新…';
+  let currentVersion = '';
+  try {
+    currentVersion = await invoke('get_app_version');
+  } catch (_) {}
+
   try {
     const { check } = window.__TAURI__.updater;
     const update = await check();
     if (update) {
-      statusEl.innerHTML = `发现新版本 <b>${update.version}</b>，正在下载…`;
-      await update.downloadAndInstall();
-      statusEl.textContent = '更新完成，重启后生效。';
+      showUpdateBadge(true);
+      if (!silent) {
+        const action = await showUpdateDialog(currentVersion, update.version);
+        if (action === 'update') {
+          if (statusEl) statusEl.textContent = '正在下载更新…';
+          await update.downloadAndInstall();
+          if (statusEl) statusEl.textContent = '更新完成，重启后生效。';
+        }
+      }
     } else {
-      statusEl.textContent = '当前已是最新版本。';
+      showUpdateBadge(false);
+      if (!silent) await showUpdateDialog(currentVersion, null);
     }
   } catch (e) {
-    statusEl.textContent = '检查更新失败：' + e;
+    if (statusEl && !silent) statusEl.textContent = '检查更新失败：' + e;
     console.error('checkForUpdates failed', e);
   }
 }
 
-document.getElementById('btn-check-update')?.addEventListener('click', checkForUpdates);
+document.getElementById('btn-win-update')?.addEventListener('click', () => checkForUpdates(false));
+document.getElementById('btn-check-update')?.addEventListener('click', () => checkForUpdates(false));
 
 // 加载主题设置
 async function initTheme() {
@@ -2239,4 +2291,6 @@ async function initTheme() {
     console.error('get_app_version failed', e);
   }
   window.__TAURI__.window.getCurrentWindow().show();
+  // 启动后静默检查更新
+  checkForUpdates(true);
 })();

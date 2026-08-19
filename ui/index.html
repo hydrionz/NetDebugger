@@ -14,6 +14,14 @@
       <span class="titlebar-version" id="app-version"></span>
       <div class="titlebar-spacer"></div>
       <div class="titlebar-controls">
+        <button id="btn-win-update" class="win-btn" data-tip="检查更新" aria-label="检查更新">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span id="update-badge" class="update-badge hidden"></span>
+        </button>
         <button id="btn-win-min" class="win-btn" data-tip="最小化" aria-label="最小化">─</button>
         <button id="btn-win-max" class="win-btn" data-tip="最大化/还原" aria-label="最大化/还原">□</button>
         <button id="btn-win-close" class="win-btn win-btn-close" data-tip="关闭" aria-label="关闭">✕</button>
@@ -314,6 +322,16 @@
     <div class="tpl-resize tpl-resize-nw" data-dir="nw"></div>
     <div class="tpl-resize tpl-resize-se" data-dir="se"></div>
     <div class="tpl-resize tpl-resize-sw" data-dir="sw"></div>
+  </dialog>
+
+  <dialog id="dlg-update" class="app-dialog">
+    <div class="app-dialog-body">
+      <div class="app-dialog-message" id="dlg-update-message"></div>
+      <div class="dialog-actions">
+        <button id="btn-update-close" value="cancel">关闭</button>
+        <button id="btn-update-apply" class="primary hidden">更新</button>
+      </div>
+    </div>
   </dialog>
 
   <div id="toast-container" class="toast-container hidden"></div>
