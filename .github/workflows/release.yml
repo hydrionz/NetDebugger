@@ -43,11 +43,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf libgtk-3-dev libayatana-appindicator3-dev
 
+      - name: Write signing key to file
+        shell: bash
+        run: echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" > /tmp/tauri.key
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PATH: /tmp/tauri.key
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Upload Windows artifacts
@@ -93,7 +97,7 @@ jobs:
           path: artifacts
 
       - name: List downloaded artifacts
-        run: find artifacts -type f | head -50
+        run: find artifacts -type f
 
       - name: Extract version from tag
         id: version
@@ -103,15 +107,26 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           TAG="${{ github.ref_name }}"
-
-          WIN_NSIS_ZIP=$(find artifacts/windows -name '*_x64-setup.nsis.zip' | head -1)
-          WIN_SIG=$(cat "$(find artifacts/windows -name '*.nsis.zip.sig' | head -1)")
-          MACOS_TAR=$(find artifacts/macos -name '*_aarch64.app.tar.gz' | head -1)
-          MACOS_SIG=$(cat "$(find artifacts/macos -name '*.app.tar.gz.sig' | head -1)")
-          LINUX_TAR=$(find artifacts/linux -name '*_amd64.AppImage.tar.gz' | head -1)
-          LINUX_SIG=$(cat "$(find artifacts/linux -name '*.AppImage.tar.gz.sig' | head -1)")
-
           BASE_URL="https://github.com/hydrionz/NetDebugger/releases/download/${TAG}"
+
+          # Find files with fallback
+          find_file() { find "$1" -name "$2" 2>/dev/null | head -1; }
+
+          WIN_NSIS_ZIP=$(find_file artifacts/windows '*_x64-setup.nsis.zip')
+          WIN_SIG_FILE=$(find_file artifacts/windows '*.nsis.zip.sig')
+          MACOS_TAR=$(find_file artifacts/macos '*_aarch64.app.tar.gz')
+          MACOS_SIG_FILE=$(find_file artifacts/macos '*.app.tar.gz.sig')
+          LINUX_TAR=$(find_file artifacts/linux '*_amd64.AppImage.tar.gz')
+          LINUX_SIG_FILE=$(find_file artifacts/linux '*.AppImage.tar.gz.sig')
+
+          # Read signatures (empty string if file not found)
+          WIN_SIG=$( [ -n "$WIN_SIG_FILE" ] && cat "$WIN_SIG_FILE" || echo "" )
+          MACOS_SIG=$( [ -n "$MACOS_SIG_FILE" ] && cat "$MACOS_SIG_FILE" || echo "" )
+          LINUX_SIG=$( [ -n "$LINUX_SIG_FILE" ] && cat "$LINUX_SIG_FILE" || echo "" )
+
+          echo "WIN_NSIS_ZIP=$WIN_NSIS_ZIP"
+          echo "MACOS_TAR=$MACOS_TAR"
+          echo "LINUX_TAR=$LINUX_TAR"
 
           jq -n \
             --arg version "v${VERSION}" \
