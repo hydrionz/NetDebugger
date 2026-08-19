@@ -159,7 +159,5 @@ jobs:
           gh release create "${{ github.ref_name }}" \
             --title "NetDebugger ${{ github.ref_name }}" \
             --generate-notes \
-            artifacts/windows/* \
-            artifacts/macos/* \
-            artifacts/linux/* \
+            $(find artifacts -type f) \
             latest.json
