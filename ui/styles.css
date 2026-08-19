@@ -181,6 +181,197 @@ button.primary:hover {
   flex-shrink: 0;
 }
 
+/* 快捷指令下拉（Notion 式：条目悬浮显示编辑/删除） */
+.tpl-picker {
+  position: relative;
+}
+
+.tpl-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tpl-menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 9999;
+  min-width: 220px;
+  max-width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.tpl-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.tpl-menu-item:hover {
+  background: var(--surface-hover);
+}
+
+.tpl-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tpl-item-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.tpl-menu-item:hover .tpl-item-actions {
+  opacity: 1;
+}
+
+.tpl-act {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-muted);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.tpl-act:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+
+.tpl-act.tpl-del:hover {
+  color: var(--error);
+}
+
+.tpl-menu-new {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 6px;
+  color: var(--text-muted);
+}
+
+.tpl-menu-new:hover {
+  color: var(--text);
+}
+
+/* 快捷指令编辑框 */
+.dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.dialog-field textarea {
+  resize: vertical;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+/* 快捷指令编辑框：默认更大，支持 8 方向窗口式拖动调整大小。
+   overflow:hidden 保证弹框本身永不出现滚动条（内容靠 textarea 内部滚动）。 */
+#dlg-template {
+  width: 420px;
+  height: 360px;
+  max-width: none;
+  min-width: 320px;
+  min-height: 240px;
+  overflow: hidden;
+}
+
+#dlg-template .app-dialog-body {
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* id 前缀提升特异性，覆盖全局 `dialog label { display: block }`，否则内容字段非 flex 导致 textarea 不伸缩、弹框溢出滚动 */
+#dlg-template .dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+#dlg-template .dialog-field-grow {
+  flex: 1;
+  min-height: 0;
+}
+
+#dlg-template .dialog-field-grow textarea {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+}
+
+/* 拖动把手：按住标题区可移动弹框 */
+#dlg-template .tpl-drag {
+  cursor: move;
+  user-select: none;
+}
+
+/* 8 方向 resize 手柄，贴弹框内边缘（不越界，避免触发弹框滚动/被 overflow:hidden 裁掉）。
+   拖哪条边只扩展该方向，对边固定。 */
+.tpl-resize {
+  position: absolute;
+  z-index: 100;
+}
+
+.tpl-resize-n, .tpl-resize-s {
+  left: 10px;
+  right: 10px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.tpl-resize-n { top: 0; }
+.tpl-resize-s { bottom: 0; }
+
+.tpl-resize-e, .tpl-resize-w {
+  top: 10px;
+  bottom: 10px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.tpl-resize-e { right: 0; }
+.tpl-resize-w { left: 0; }
+
+.tpl-resize-ne, .tpl-resize-sw {
+  width: 10px;
+  height: 10px;
+  cursor: nesw-resize;
+}
+
+.tpl-resize-ne { top: 0; right: 0; }
+.tpl-resize-sw { bottom: 0; left: 0; }
+
+.tpl-resize-se, .tpl-resize-nw {
+  width: 10px;
+  height: 10px;
+  cursor: nwse-resize;
+}
+
+.tpl-resize-se { bottom: 0; right: 0; }
+.tpl-resize-nw { top: 0; left: 0; }
+
 #btn-clear:hover {
   color: var(--error);
 }
@@ -545,7 +736,7 @@ body.resizing-h {
   padding: 3px 6px;
 }
 
-.send-row button {
+.send-row > #btn-send {
   margin-left: auto;
   min-width: 60px;
 }

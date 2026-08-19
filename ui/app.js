@@ -23,6 +23,8 @@ const state = {
   endpointDraft: [],
   headerDraft: [],
   subprotocolDraft: [],
+  templates: [],
+  activeTemplate: null,
 };
 
 const els = {
@@ -38,6 +40,14 @@ const els = {
   detailBody: document.getElementById('detail-body'),
   sendTarget: document.getElementById('send-target'),
   sendInput: document.getElementById('send-input'),
+  tplTrigger: document.getElementById('tpl-trigger'),
+  tplMenu: document.getElementById('tpl-menu'),
+  dlgTemplate: document.getElementById('dlg-template'),
+  dlgTemplateMessage: document.getElementById('dlg-template-message'),
+  dlgTemplateName: document.getElementById('dlg-template-name'),
+  dlgTemplateContent: document.getElementById('dlg-template-content'),
+  btnTemplateOk: document.getElementById('btn-template-ok'),
+  btnTemplateCancel: document.getElementById('btn-template-cancel'),
   settingSendKeyMode: document.getElementById('setting-send-key-mode'),
   dlgProject: document.getElementById('dlg-project'),
   dlgProjectTitle: document.getElementById('dlg-project-title'),
@@ -1312,6 +1322,278 @@ function initSendKeyMode() {
   } catch { /* ignore */ }
 }
 
+function loadTemplates() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('netdebugger.templates') || '[]');
+    state.templates = Array.isArray(saved)
+      ? saved.filter((t) => t && typeof t.name === 'string' && typeof t.content === 'string')
+      : [];
+  } catch {
+    state.templates = [];
+  }
+}
+
+function saveTemplates() {
+  try { localStorage.setItem('netdebugger.templates', JSON.stringify(state.templates)); } catch { /* ignore */ }
+}
+
+function renderTemplateMenu() {
+  els.tplMenu.innerHTML = '';
+  if (!state.templates.length) {
+    const empty = document.createElement('div');
+    empty.className = 'tpl-menu-item';
+    empty.style.color = 'var(--text-muted)';
+    empty.style.cursor = 'default';
+    empty.textContent = '暂无快捷指令';
+    els.tplMenu.appendChild(empty);
+  }
+  for (const t of state.templates) {
+    const item = document.createElement('div');
+    item.className = 'tpl-menu-item';
+    item.dataset.name = t.name;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'tpl-item-name';
+    nameSpan.textContent = t.name;
+    const actions = document.createElement('span');
+    actions.className = 'tpl-item-actions';
+    const btnEdit = document.createElement('button');
+    btnEdit.type = 'button';
+    btnEdit.className = 'tpl-act';
+    btnEdit.dataset.act = 'edit';
+    btnEdit.dataset.tip = '编辑';
+    btnEdit.textContent = '✎';
+    const btnDel = document.createElement('button');
+    btnDel.type = 'button';
+    btnDel.className = 'tpl-act tpl-del';
+    btnDel.dataset.act = 'del';
+    btnDel.dataset.tip = '删除';
+    btnDel.textContent = '✕';
+    actions.append(btnEdit, btnDel);
+    item.append(nameSpan, actions);
+    els.tplMenu.appendChild(item);
+  }
+  const newItem = document.createElement('div');
+  newItem.className = 'tpl-menu-item tpl-menu-new';
+  newItem.dataset.act = 'new';
+  newItem.textContent = '＋ 新建快捷指令';
+  els.tplMenu.appendChild(newItem);
+  updateTplTrigger();
+}
+
+function updateTplTrigger() {
+  if (els.tplTrigger.firstChild) els.tplTrigger.firstChild.textContent = state.activeTemplate || '选择快捷指令…';
+}
+
+function toggleTemplateMenu() {
+  if (els.tplMenu.classList.contains('hidden')) {
+    renderTemplateMenu();
+    els.tplMenu.classList.remove('hidden');
+  } else {
+    els.tplMenu.classList.add('hidden');
+  }
+}
+
+function closeTemplateMenu() {
+  els.tplMenu.classList.add('hidden');
+}
+
+async function onTemplateMenuClick(e) {
+  const act = e.target.closest('.tpl-act');
+  const item = e.target.closest('.tpl-menu-item');
+  if (!item) return;
+  closeTemplateMenu();
+  if (item.dataset.act === 'new') { createTemplate(); return; }
+  const name = item.dataset.name;
+  if (act) {
+    if (act.dataset.act === 'edit') editTemplate(name);
+    else if (act.dataset.act === 'del') deleteTemplate(name);
+    return;
+  }
+  selectTemplate(name);
+}
+
+function selectTemplate(name) {
+  const t = state.templates.find((x) => x.name === name);
+  if (!t) return;
+  state.activeTemplate = name;
+  updateTplTrigger();
+  els.sendInput.value = t.content;
+  els.sendInput.focus();
+  els.sendInput.setSelectionRange(t.content.length, t.content.length);
+}
+
+function upsertTemplate(name, content) {
+  const idx = state.templates.findIndex((x) => x.name === name);
+  if (idx >= 0) state.templates[idx].content = content;
+  else state.templates.push({ name, content });
+}
+
+async function createTemplate() {
+  const res = await showTemplateEditor({ name: '', content: els.sendInput.value });
+  if (!res) return;
+  const name = res.name.trim();
+  if (!name) { showError('快捷指令名称不能为空'); return; }
+  upsertTemplate(name, res.content);
+  state.activeTemplate = name;
+  saveTemplates();
+  renderTemplateMenu();
+  showToast('已保存快捷指令');
+}
+
+async function editTemplate(name) {
+  const t = state.templates.find((x) => x.name === name);
+  if (!t) return;
+  const res = await showTemplateEditor({ name: t.name, content: t.content });
+  if (!res) return;
+  const newName = res.name.trim();
+  if (!newName) { showError('快捷指令名称不能为空'); return; }
+  state.templates = state.templates.filter((x) => x.name !== name);
+  upsertTemplate(newName, res.content);
+  state.activeTemplate = newName;
+  saveTemplates();
+  renderTemplateMenu();
+  showToast('已保存快捷指令');
+}
+
+async function deleteTemplate(name) {
+  if (!await showConfirm(`删除快捷指令「${name}」？`)) return;
+  state.templates = state.templates.filter((x) => x.name !== name);
+  if (state.activeTemplate === name) state.activeTemplate = null;
+  saveTemplates();
+  renderTemplateMenu();
+  showToast('已删除快捷指令');
+}
+
+// 快捷指令编辑框（新建 / 编辑共用）。resolve({name, content})；取消 resolve(null)。
+function showTemplateEditor(initial) {
+  els.dlgTemplateName.value = (initial && initial.name) || '';
+  els.dlgTemplateContent.value = (initial && initial.content) || '';
+  els.dlgTemplateMessage.textContent = (initial && initial.name) ? '编辑快捷指令' : '新建快捷指令';
+  return new Promise((resolve) => {
+    const done = (val) => {
+      els.btnTemplateOk.removeEventListener('click', onOk);
+      els.btnTemplateCancel.removeEventListener('click', onCancel);
+      els.dlgTemplateName.removeEventListener('keydown', onKey);
+      els.dlgTemplateContent.removeEventListener('keydown', onKey);
+      els.dlgTemplate.close();
+      resolve(val);
+    };
+    const onOk = () => done({ name: els.dlgTemplateName.value, content: els.dlgTemplateContent.value });
+    const onCancel = () => done(null);
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); done(null); }
+    };
+    els.btnTemplateOk.addEventListener('click', onOk);
+    els.btnTemplateCancel.addEventListener('click', onCancel);
+    els.dlgTemplateName.addEventListener('keydown', onKey);
+    els.dlgTemplateContent.addEventListener('keydown', onKey);
+    els.dlgTemplate.showModal();
+    positionTemplateDialog();
+    els.dlgTemplateName.focus();
+  });
+}
+
+// 把居中显示的 dialog 固化为显式 left/top 定位，供 8 方向 resize 以对边为锚。
+function positionTemplateDialog() {
+  const dlg = els.dlgTemplate;
+  const rect = dlg.getBoundingClientRect();
+  dlg.style.margin = '0';
+  dlg.style.left = Math.round(rect.left) + 'px';
+  dlg.style.top = Math.round(rect.top) + 'px';
+  dlg.style.width = rect.width + 'px';
+  dlg.style.height = rect.height + 'px';
+}
+
+const TPL_MIN_W = 320;
+const TPL_MIN_H = 240;
+
+// 8 方向窗口式 resize：拖哪条边/角，只扩展那个方向，对边固定。
+function initTemplateResize() {
+  const dlg = els.dlgTemplate;
+  let drag = null;
+
+  function onMove(e) {
+    if (!drag) return;
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    let { left, top, width, height } = drag.rect;
+    const dir = drag.dir;
+    if (dir.includes('e')) width += dx;
+    if (dir.includes('s')) height += dy;
+    if (dir.includes('w')) { left += dx; width -= dx; }
+    if (dir.includes('n')) { top += dy; height -= dy; }
+    if (width < TPL_MIN_W) {
+      if (dir.includes('w')) left -= TPL_MIN_W - width;
+      width = TPL_MIN_W;
+    }
+    if (height < TPL_MIN_H) {
+      if (dir.includes('n')) top -= TPL_MIN_H - height;
+      height = TPL_MIN_H;
+    }
+    dlg.style.left = left + 'px';
+    dlg.style.top = top + 'px';
+    dlg.style.width = width + 'px';
+    dlg.style.height = height + 'px';
+  }
+
+  function onUp() {
+    drag = null;
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+
+  dlg.querySelectorAll('.tpl-resize').forEach((h) => {
+    h.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      drag = { dir: h.dataset.dir, startX: e.clientX, startY: e.clientY, rect: dlg.getBoundingClientRect() };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  });
+}
+
+els.tplTrigger.addEventListener('click', (e) => { e.stopPropagation(); toggleTemplateMenu(); });
+
+// 按住弹框标题区拖动移动整个弹框
+function initTemplateDrag() {
+  const dlg = els.dlgTemplate;
+  const handle = dlg.querySelector('.tpl-drag');
+  if (!handle) return;
+  let startX = 0, startY = 0, origLeft = 0, origTop = 0, dragging = false;
+
+  function onMove(e) {
+    if (!dragging) return;
+    const x = origLeft + (e.clientX - startX);
+    const y = origTop + (e.clientY - startY);
+    dlg.style.left = x + 'px';
+    dlg.style.top = y + 'px';
+  }
+
+  function onUp() {
+    dragging = false;
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+
+  handle.addEventListener('mousedown', (e) => {
+    if (e.target.closest('button')) return; // 标题区内的按钮不被拖动
+    e.preventDefault();
+    e.stopPropagation();
+    const r = dlg.getBoundingClientRect();
+    startX = e.clientX;
+    startY = e.clientY;
+    origLeft = parseFloat(dlg.style.left) || r.left;
+    origTop = parseFloat(dlg.style.top) || r.top;
+    dragging = true;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+els.tplMenu.addEventListener('click', onTemplateMenuClick);
+document.addEventListener('click', closeTemplateMenu);
+
 els.btnEndpointAdd.addEventListener('click', addEndpointFromInput);
 els.endpointInput.addEventListener('keydown', (ev) => {
   if (ev.key === 'Enter') {
@@ -1921,6 +2203,10 @@ async function initTheme() {
   initSettingsMenu();
   initSendKeyMode();
   initTruncateToggle();
+  initTemplateResize();
+  initTemplateDrag();
+  loadTemplates();
+  renderTemplateMenu();
   // 加载版本号并填充标题栏与关于页（版本号单点维护于 Cargo.toml）
   try {
     const v = await invoke('get_app_version');
