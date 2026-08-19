@@ -21,7 +21,7 @@
 ### 2.1 核心调试
 
 - [x] WS 服务端 / 客户端模拟；WS Server 多客户端 + 多 endpoint 路径（握手按路径路由、未知路径 404、按 endpoint 定向广播）
-- [x] 消息发送目标：全体广播 / 某 endpoint 全体广播 / 指定客户端（当前仅支持发送文本）
+- [x] 消息发送目标：服务端支持全体广播 / 某 endpoint 全体广播 / 指定客户端（当前仅支持发送文本）；客户端仅向连接的服务端发送，无目标选择
 - [x] 客户端自定义请求头（握手时发送，如 Authorization / Origin / X-Foo）与 Subprotocol（`Sec-WebSocket-Protocol` 多选，逗号分隔合并）
 - [x] 项目分组管理；会话可独立或归组；连接自定义命名、编辑（运行中禁止编辑，协议/角色创建后锁定）
 - [x] 客户端一个连接对应一个 endpoint（目标地址只填 host:port，endpoint 拼接到 URL）

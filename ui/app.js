@@ -1112,10 +1112,12 @@ function updateContentArea() {
 
 function updateSendArea() {
   const id = state.selectedSessionId;
+  const targetLabel = els.sendTarget.closest('label');
   els.sendTarget.innerHTML = '';
   if (!id) {
     els.sendInput.disabled = true;
     els.sendTarget.disabled = true;
+    if (targetLabel) targetLabel.style.display = 'none';
     document.getElementById('btn-send').disabled = true;
     return;
   }
@@ -1128,6 +1130,7 @@ function updateSendArea() {
   document.getElementById('btn-send').disabled = !isConnected;
 
   if (s.role === 'server') {
+    if (targetLabel) targetLabel.style.display = '';
     const allOpt = document.createElement('option');
     allOpt.value = 'all';
     allOpt.textContent = '所有客户端';
@@ -1150,10 +1153,7 @@ function updateSendArea() {
       els.sendTarget.value = state.selectedClientId;
     }
   } else {
-    const opt = document.createElement('option');
-    opt.value = 'server';
-    opt.textContent = '服务端';
-    els.sendTarget.appendChild(opt);
+    if (targetLabel) targetLabel.style.display = 'none';
   }
 }
 
