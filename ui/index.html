@@ -203,6 +203,7 @@
       <div id="session-client-config" class="hidden">
         <label>目标地址: <input type="text" id="session-url" placeholder="如 127.0.0.1:8080（只填地址端口）" value="127.0.0.1:8080" /></label>
         <label>Endpoint 路径: <input type="text" id="session-client-endpoint" placeholder="如 /echo（可选，拼接到目标地址后）" /></label>
+        <label>自动重连（秒）: <input type="number" id="session-auto-reconnect" placeholder="0 = 关闭" value="30" min="0" inputmode="numeric" /></label>
         <div class="endpoint-list-editor">
           <div class="endpoint-list-title">自定义请求头（握手时发送）</div>
           <div id="header-list" class="endpoint-list"></div>

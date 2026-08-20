@@ -65,6 +65,7 @@ const els = {
   sessionPort: document.getElementById('session-port'),
   sessionUrl: document.getElementById('session-url'),
   sessionClientEndpoint: document.getElementById('session-client-endpoint'),
+  sessionAutoReconnect: document.getElementById('session-auto-reconnect'),
   endpointList: document.getElementById('endpoint-list'),
   endpointInput: document.getElementById('endpoint-input'),
   btnEndpointAdd: document.getElementById('btn-endpoint-add'),
@@ -556,6 +557,7 @@ function openSessionDialog(projectId) {
   els.sessionPort.value = '8080';
   els.sessionUrl.value = '127.0.0.1:8080';
   els.sessionClientEndpoint.value = '';
+  els.sessionAutoReconnect.value = '30';
   state.endpointDraft = [];
   renderEndpointList();
   state.headerDraft = [];
@@ -589,6 +591,7 @@ function openEditSessionDialog(session) {
     els.sessionPort.value = '8080';
     // 目标地址回显：去掉 ws:// 前缀，只显示 host:port（若历史数据带前缀则剥掉）
     els.sessionUrl.value = stripWsPrefix(session.target_url || '');
+    els.sessionAutoReconnect.value = session.auto_reconnect != null ? String(session.auto_reconnect) : '30';
     state.headerDraft = Object.entries(session.headers || {}).map(([key, value]) => ({ key, value }));
     renderHeaderList();
     state.subprotocolDraft = (session.subprotocols || []).slice();
@@ -786,6 +789,9 @@ async function saveSession() {
     ? null
     : ensureWsScheme(els.sessionUrl.value.trim());
   const port = isServer ? els.sessionPort.value.trim() : '';
+  const autoReconnect = isServer
+    ? null
+    : (els.sessionAutoReconnect.value.trim() === '' ? 0 : Math.max(0, parseInt(els.sessionAutoReconnect.value.trim(), 10) || 0));
   const req = {
     project_id: projectId || null,
     name: name || null,
@@ -796,6 +802,7 @@ async function saveSession() {
     endpoints,
     headers: isServer || !state.headerDraft.length ? null : Object.fromEntries(state.headerDraft.map((h) => [h.key, h.value])),
     subprotocols: isServer || !state.subprotocolDraft.length ? null : state.subprotocolDraft.slice(),
+    auto_reconnect: autoReconnect,
   };
   try {
     if (editId) {

@@ -18,6 +18,7 @@ pub struct CreateSessionRequest {
     endpoints: Option<Vec<String>>,
     headers: Option<HashMap<String, String>>,
     subprotocols: Option<Vec<String>>,
+    auto_reconnect: Option<i64>,
 }
 
 #[tauri::command]
@@ -67,6 +68,7 @@ pub async fn create_session(
         endpoints,
         headers,
         subprotocols,
+        req.auto_reconnect,
     )
     .await
     .map_err(|e| e.to_string())
@@ -82,6 +84,7 @@ pub struct UpdateSessionRequest {
     endpoints: Option<Vec<String>>,
     headers: Option<HashMap<String, String>>,
     subprotocols: Option<Vec<String>>,
+    auto_reconnect: Option<i64>,
 }
 
 /// 校验并规范化 endpoint 路径列表：trim、跳过空串、必须 / 开头、无空白与 ?#、去重保序；全空 → None。
@@ -163,6 +166,7 @@ pub async fn update_session(
         endpoints,
         headers,
         subprotocols,
+        req.auto_reconnect,
     )
     .await
     .map_err(|e| e.to_string())
@@ -249,14 +253,15 @@ pub async fn start_session(
         endpoints: session.endpoints.clone(),
         headers: session.headers.clone(),
         subprotocols: session.subprotocols.clone(),
+        auto_reconnect: session.auto_reconnect,
     };
 
-    let (shutdown_tx, shutdown_rx) = tokio::sync::mpsc::channel::<()>(1);
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel::<OutgoingMessage>(256);
     let handle = Arc::new(SessionHandle {
         app: app.clone(),
         shutdown_tx,
-        outbound_tx,
+        outbound_tx: Arc::new(tokio::sync::Mutex::new(outbound_tx)),
         clients: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
     });
 
@@ -290,7 +295,7 @@ pub async fn stop_session(state: State<'_ , AppState>, id: String) -> Result<(),
     };
 
     if let Some(h) = handle {
-        let _ = h.shutdown_tx.send(()).await;
+        let _ = h.shutdown_tx.send(true);
     } else {
         db::update_session_status(&state.db, &id, "closed", None, None)
             .await
@@ -383,6 +388,8 @@ pub async fn send_message(
         let msg = OutgoingMessage { endpoint, kind };
         handle
             .outbound_tx
+            .lock()
+            .await
             .send(msg)
             .await
             .map_err(|_| "outbound channel closed".to_string())

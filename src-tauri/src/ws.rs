@@ -27,7 +27,7 @@ pub async fn run_ws_server(
     config: WsConfig,
     handle: Arc<SessionHandle>,
     mut outbound_rx: mpsc::Receiver<OutgoingMessage>,
-    mut shutdown_rx: mpsc::Receiver<()>,
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
 ) {
     let bind_addr = match config.bind_addr {
         Some(addr) => addr,
@@ -192,7 +192,7 @@ pub async fn run_ws_server(
                     }).await;
                 }
             }
-            _ = shutdown_rx.recv() => {
+            _ = shutdown_rx.changed() => {
                 // 服务端停止，通知所有已连接的客户端任务退出
                 let clients = handle.clients.read().await;
                 for client in clients.values() {
@@ -314,10 +314,10 @@ pub async fn run_ws_client(
     config: WsConfig,
     handle: Arc<SessionHandle>,
     outbound_rx: mpsc::Receiver<OutgoingMessage>,
-    shutdown_rx: mpsc::Receiver<()>,
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
 ) {
     let base_url = match config.target_url {
-        Some(u) => u,
+        Some(ref u) => u.clone(),
         None => {
             emit_error(&app, &session_id, "未配置目标地址，无法启动客户端");
             emit_status(&app, &session_id, "error", None, None);
@@ -333,22 +333,84 @@ pub async fn run_ws_client(
             let trimmed = base_url.trim_end_matches('/');
             format!("{}{}", trimmed, path)
         }
-        None => base_url,
+        None => base_url.clone(),
     };
 
-    db::update_session_status(&db, &session_id, "starting", None, None)
+    let reconnect = config.auto_reconnect.unwrap_or(0);
+    let mut outbound_rx = outbound_rx;
+    let mut attempt = 1u32;
+
+    loop {
+        let manual_stop = run_ws_client_attempt(
+            &app,
+            &db,
+            &session_id,
+            &config,
+            &url,
+            endpoint.clone(),
+            &handle,
+            outbound_rx,
+            shutdown_rx.clone(),
+        )
+        .await;
+
+        // 手动停止，或未配置自动重连：彻底关闭并退出
+        if manual_stop || reconnect <= 0 {
+            set_closed(&app, &db, &session_id, None, Some(&url)).await;
+            remove_session_handle(&app, &session_id).await;
+            return;
+        }
+
+        // 自动重连：等待间隔后重试
+        let interval = reconnect as u64;
+        persist_notice(&db, &handle, &session_id, format!("与服务端【{}】的连接已断开，{} 秒后自动重连（第 {} 次）", display_addr(&url), interval, attempt)).await;
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(interval)) => {}
+            _ = shutdown_rx.changed() => {
+                set_closed(&app, &db, &session_id, None, Some(&url)).await;
+                remove_session_handle(&app, &session_id).await;
+                return;
+            }
+        }
+        attempt += 1;
+
+        // 重建 outbound channel 并更新 SessionHandle（自动重连后旧的 receiver 已失效）
+        let (outbound_tx, new_outbound_rx) = tokio::sync::mpsc::channel::<OutgoingMessage>(256);
+        {
+            let state = app.state::<crate::state::AppState>();
+            let sessions = state.sessions.read().await;
+            if let Some(h) = sessions.get(&session_id) {
+                *h.outbound_tx.lock().await = outbound_tx;
+            }
+        }
+        outbound_rx = new_outbound_rx;
+    }
+}
+
+/// 单次客户端连接尝试：连接成功则进入 socket loop，直至断开。
+/// 返回 true 表示手动停止（不再重连）；false 表示连接结束（可能因断开或连接失败）。
+async fn run_ws_client_attempt(
+    app: &AppHandle,
+    db: &db::DbConnection,
+    session_id: &str,
+    config: &WsConfig,
+    url: &str,
+    endpoint: Option<String>,
+    handle: &Arc<SessionHandle>,
+    outbound_rx: mpsc::Receiver<OutgoingMessage>,
+    shutdown_rx: tokio::sync::watch::Receiver<bool>,
+) -> bool {
+    db::update_session_status(db, session_id, "starting", None, None)
         .await
         .ok();
-    emit_status(&app, &session_id, "starting", None, None);
+    emit_status(app, session_id, "starting", None, None);
 
-    let mut request = match url.as_str().into_client_request() {
+    let mut request = match url.into_client_request() {
         Ok(r) => r,
         Err(e) => {
             eprintln!("ws client build request error: {}", e);
-            emit_error(&app, &session_id, &format!("构建连接请求失败：{}", e));
-            set_closed(&app, &db, &session_id, None, None).await;
-            remove_session_handle(&app, &session_id).await;
-            return;
+            emit_error(app, session_id, &format!("构建连接请求失败：{}", e));
+            return false;
         }
     };
     let headers = request.headers_mut();
@@ -368,65 +430,50 @@ pub async fn run_ws_client(
         Ok(x) => x,
         Err(e) => {
             eprintln!("ws client connect error: {}", e);
-            emit_error(&app, &session_id, &format!("连接 {} 失败：{}", url, friendly_connect_error(&e)));
-            set_closed(&app, &db, &session_id, None, None).await;
-            remove_session_handle(&app, &session_id).await;
-            return;
+            emit_error(app, session_id, &format!("连接 {} 失败：{}", url, friendly_connect_error(&e)));
+            return false;
         }
     };
 
-    let remote_addr = url.clone();
-    let local_addr: Option<String> = None;
+    let remote_addr = url.to_string();
 
-    db::update_session_status(
-        &db,
-        &session_id,
-        "running",
-        None,
-        Some(&remote_addr),
-    )
-    .await
-    .ok();
-    emit_status(
-        &app,
-        &session_id,
-        "running",
-        None,
-        Some(remote_addr.clone()),
-    );
-    persist_notice(&db, &handle, &session_id, format!("与服务端【{}】的连接已成功建立", display_addr(&remote_addr))).await;
+    db::update_session_status(db, session_id, "running", None, Some(&remote_addr))
+        .await
+        .ok();
+    emit_status(app, session_id, "running", None, Some(remote_addr.clone()));
+    persist_notice(db, handle, session_id, format!("与服务端【{}】的连接已成功建立", display_addr(&remote_addr))).await;
 
     run_socket_loop(
-        app,
-        db,
-        session_id,
+        app.clone(),
+        db.clone(),
+        session_id.to_string(),
         ws_stream,
-        handle,
+        handle.clone(),
         outbound_rx,
         shutdown_rx,
-        local_addr,
         remote_addr,
         endpoint,
     )
-    .await;
+    .await
 }
 
 async fn run_socket_loop<S>(
-    app: AppHandle,
+    _app: AppHandle,
     db: db::DbConnection,
     session_id: String,
     ws_stream: tokio_tungstenite::WebSocketStream<S>,
     handle: Arc<SessionHandle>,
     mut outbound_rx: mpsc::Receiver<OutgoingMessage>,
-    mut shutdown_rx: mpsc::Receiver<()>,
-    local_addr: Option<String>,
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
     remote_addr: String,
     endpoint: Option<String>,
-) where
+) -> bool
+where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
     let (mut write, mut read) = ws_stream.split();
     let endpoint_ref = endpoint.as_deref();
+    let mut manually_stopped = false;
 
     loop {
         tokio::select! {
@@ -467,19 +514,16 @@ async fn run_socket_loop<S>(
                     break;
                 }
             }
-            _ = shutdown_rx.recv() => {
+            _ = shutdown_rx.changed() => {
                 let _ = write.send(WsMessage::Close(None)).await;
+                manually_stopped = true;
                 break;
             }
         }
     }
 
     persist_notice(&db, &handle, &session_id, format!("与服务端【{}】的连接已断开", display_addr(&remote_addr))).await;
-    set_closed(&app, &db, &session_id, local_addr.as_deref(), Some(&remote_addr)).await;
-    // 任务退出，从 state.sessions 里移除自己
-    let state = app.state::<crate::state::AppState>();
-    let mut sessions = state.sessions.write().await;
-    sessions.remove(&session_id);
+    manually_stopped
 }
 
 async fn persist_in_message(

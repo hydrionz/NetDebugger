@@ -11,6 +11,7 @@ pub struct WsConfig {
     pub endpoints: Option<Vec<String>>,
     pub headers: Option<HashMap<String, String>>,
     pub subprotocols: Option<Vec<String>>,
+    pub auto_reconnect: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,8 +70,9 @@ pub struct ClientHandle {
 
 pub struct SessionHandle {
     pub app: tauri::AppHandle,
-    pub shutdown_tx: mpsc::Sender<()>,
-    pub outbound_tx: mpsc::Sender<OutgoingMessage>,
+    pub shutdown_tx: tokio::sync::watch::Sender<bool>,
+    // 可变（自动重连时会重建 outbound channel），故用 Mutex 包裹以便经 Arc 共享更新
+    pub outbound_tx: Arc<Mutex<mpsc::Sender<OutgoingMessage>>>,
     pub clients: Arc<RwLock<HashMap<String, ClientHandle>>>,
 }
 

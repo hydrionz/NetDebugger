@@ -31,6 +31,7 @@ pub struct Session {
     pub endpoints: Option<Vec<String>>,
     pub headers: Option<std::collections::HashMap<String, String>>,
     pub subprotocols: Option<Vec<String>>,
+    pub auto_reconnect: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +75,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/006_message_sender.sql"),
     include_str!("../migrations/007_notice_payload_type.sql"),
     include_str!("../migrations/008_ws_headers_subprotocols.sql"),
+    include_str!("../migrations/009_auto_reconnect.sql"),
 ];
 
 pub async fn open_db(path: &str) -> Result<Connection> {
@@ -227,7 +229,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
         let mut result = Vec::with_capacity(projects.len());
         for project in projects {
             let mut stmt = conn.prepare(
-                "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints, headers, subprotocols \
+                "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints, headers, subprotocols, auto_reconnect \
                  FROM sessions WHERE project_id = ?1 ORDER BY created_at",
             )?;
             let sessions = stmt
@@ -252,6 +254,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
                         endpoints: endpoints_raw.and_then(|s| serde_json::from_str(&s).ok()),
                         headers: headers_raw.and_then(|s| serde_json::from_str(&s).ok()),
                         subprotocols: subprotocols_raw.and_then(|s| serde_json::from_str(&s).ok()),
+                        auto_reconnect: row.get(15)?,
                     })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -260,7 +263,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
 
         // Ungrouped sessions
         let mut stmt = conn.prepare(
-            "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints, headers, subprotocols \
+            "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints, headers, subprotocols, auto_reconnect \
              FROM sessions WHERE project_id IS NULL ORDER BY created_at",
         )?;
         let ungrouped = stmt
@@ -284,6 +287,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
                     endpoints: endpoints_raw.and_then(|s| serde_json::from_str(&s).ok()),
                     headers: headers_raw.and_then(|s| serde_json::from_str(&s).ok()),
                     subprotocols: subprotocols_raw.and_then(|s| serde_json::from_str(&s).ok()),
+                    auto_reconnect: row.get(15)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -316,6 +320,7 @@ pub async fn create_session(
     endpoints: Option<Vec<String>>,
     headers: Option<std::collections::HashMap<String, String>>,
     subprotocols: Option<Vec<String>>,
+    auto_reconnect: Option<i64>,
 ) -> Result<Session> {
     let now = chrono::Utc::now().timestamp_millis();
     let id = Uuid::new_v4().to_string();
@@ -330,8 +335,8 @@ pub async fn create_session(
 
     conn.call(move |conn| {
         conn.execute(
-            "INSERT INTO sessions (id, project_id, name, protocol, role, status, bind_addr, target_url, endpoints, headers, subprotocols, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT INTO sessions (id, project_id, name, protocol, role, status, bind_addr, target_url, endpoints, headers, subprotocols, auto_reconnect, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 &id,
                 &project_id,
@@ -344,6 +349,7 @@ pub async fn create_session(
                 &endpoints_json,
                 &headers_json,
                 &subprotocols_json,
+                &auto_reconnect,
                 &now.to_string(),
                 &now.to_string(),
             ],
@@ -364,6 +370,7 @@ pub async fn create_session(
             endpoints,
             headers,
             subprotocols,
+            auto_reconnect,
         })
     })
     .await
@@ -380,6 +387,7 @@ pub async fn update_session(
     endpoints: Option<Vec<String>>,
     headers: Option<std::collections::HashMap<String, String>>,
     subprotocols: Option<Vec<String>>,
+    auto_reconnect: Option<i64>,
 ) -> Result<()> {
     let id = id.to_string();
     let project_id = project_id.map(|s| s.to_string());
@@ -391,7 +399,7 @@ pub async fn update_session(
 
     conn.call(move |conn| {
         conn.execute(
-            "UPDATE sessions SET project_id = ?2, name = ?3, bind_addr = ?4, target_url = ?5, endpoints = ?6, headers = ?7, subprotocols = ?8, updated_at = ?9 WHERE id = ?1",
+            "UPDATE sessions SET project_id = ?2, name = ?3, bind_addr = ?4, target_url = ?5, endpoints = ?6, headers = ?7, subprotocols = ?8, auto_reconnect = ?9, updated_at = ?10 WHERE id = ?1",
             params![
                 &id,
                 &project_id,
@@ -401,6 +409,7 @@ pub async fn update_session(
                 &endpoints_json,
                 &headers_json,
                 &subprotocols_json,
+                &auto_reconnect,
                 &now.to_string(),
             ],
         )?;
