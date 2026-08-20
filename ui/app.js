@@ -530,21 +530,65 @@ function extractPort(bindAddr) {
 
 function renderEndpointList() {
   els.endpointList.innerHTML = '';
-  for (const ep of state.endpointDraft) {
+  state.endpointDraft.forEach((ep, idx) => {
     const row = document.createElement('div');
     row.className = 'endpoint-item';
-    row.innerHTML = `<span class="endpoint-path">${escapeHtml(ep)}</span><button type="button" class="endpoint-remove" data-tip="删除">×</button>`;
-    row.querySelector('.endpoint-remove').addEventListener('click', () => {
+    row.innerHTML = `<span class="endpoint-path" data-tip="点击编辑">${escapeHtml(ep)}</span><button type="button" class="endpoint-remove" data-tip="删除">×</button>`;
+    row.querySelector('.endpoint-path').addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'endpoint-edit';
+      input.value = ep;
+      input.dataset.idx = idx;
+      row.querySelector('.endpoint-path').replaceWith(input);
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); commitEndpointEdit(input); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); renderEndpointList(); }
+      });
+      input.addEventListener('blur', () => commitEndpointEdit(input));
+    });
+    row.querySelector('.endpoint-remove').addEventListener('click', async () => {
+      const sessionId = els.editSessionId.value.trim();
+      if (sessionId) {
+        try {
+          const n = await invoke('count_messages_by_endpoint', { sessionId, endpoint: ep });
+          if (n > 0) {
+            const ok = await showConfirm(`Endpoint ${ep} 有 ${n} 条历史消息，删除后将一并删除这些消息，确定删除？`);
+            if (!ok) return;
+            await invoke('delete_messages_by_endpoint', { sessionId, endpoint: ep });
+            if (state.selectedSessionId === sessionId) {
+              state.messages.set(sessionId, (state.messages.get(sessionId) || []).filter((m) => m.endpoint !== ep));
+              renderTimeline();
+            }
+          }
+        } catch (e) {
+          showError('删除 endpoint 消息失败: ' + e);
+          return;
+        }
+      }
       state.endpointDraft = state.endpointDraft.filter((x) => x !== ep);
       renderEndpointList();
     });
     els.endpointList.appendChild(row);
-  }
+  });
+}
+
+function commitEndpointEdit(input) {
+  const idx = parseInt(input.dataset.idx, 10);
+  let val = input.value.trim();
+  if (!val) { renderEndpointList(); return; }
+  if (!val.startsWith('/')) val = '/' + val;
+  if (state.endpointDraft.includes(val)) { renderEndpointList(); return; }
+  state.endpointDraft[idx] = val;
+  renderEndpointList();
 }
 
 function addEndpointFromInput() {
-  const val = els.endpointInput.value.trim();
+  let val = els.endpointInput.value.trim();
   if (!val) return;
+  if (!val.startsWith('/')) val = '/' + val;
   if (state.endpointDraft.includes(val)) return;
   state.endpointDraft.push(val);
   els.endpointInput.value = '';

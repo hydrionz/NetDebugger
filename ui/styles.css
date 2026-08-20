@@ -1706,6 +1706,18 @@ dialog select {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
+.endpoint-item .endpoint-path:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.endpoint-edit {
+  flex: 1;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  padding: 1px 4px;
+}
+
 .endpoint-remove {
   border: none;
   background: none;

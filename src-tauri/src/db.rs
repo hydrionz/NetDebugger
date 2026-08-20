@@ -80,6 +80,11 @@ pub async fn open_db(path: &str) -> Result<Connection> {
     let conn = Connection::open(path)
         .await
         .with_context(|| format!("open db at {}", path))?;
+    conn.call(|conn| {
+        conn.execute_batch("PRAGMA foreign_keys = ON;")
+            .map_err(tokio_rusqlite::Error::from)
+    })
+    .await?;
     run_migrations(&conn).await?;
     reset_all_sessions_to_idle(&conn).await?;
     vacuum_if_needed(&conn).await?;
@@ -634,4 +639,41 @@ pub async fn clear_messages(conn: &Connection, session_id: &str) -> Result<()> {
     })
     .await
     .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("clear messages: {}", e))
+}
+
+pub async fn count_messages_by_endpoint(
+    conn: &Connection,
+    session_id: &str,
+    endpoint: &str,
+) -> Result<i64> {
+    let session_id = session_id.to_string();
+    let endpoint = endpoint.to_string();
+    conn.call(move |conn| {
+        let n: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM messages WHERE session_id = ?1 AND endpoint = ?2",
+            params![&session_id, &endpoint],
+            |row| row.get(0),
+        )?;
+        Ok(n)
+    })
+    .await
+    .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("count messages by endpoint: {}", e))
+}
+
+pub async fn delete_messages_by_endpoint(
+    conn: &Connection,
+    session_id: &str,
+    endpoint: &str,
+) -> Result<()> {
+    let session_id = session_id.to_string();
+    let endpoint = endpoint.to_string();
+    conn.call(move |conn| {
+        conn.execute(
+            "DELETE FROM messages WHERE session_id = ?1 AND endpoint = ?2",
+            params![&session_id, &endpoint],
+        )?;
+        Ok(())
+    })
+    .await
+    .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("delete messages by endpoint: {}", e))
 }

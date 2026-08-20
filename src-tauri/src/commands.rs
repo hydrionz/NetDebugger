@@ -195,6 +195,28 @@ pub async fn clear_messages(state: State<'_ , AppState>, session_id: String) -> 
 }
 
 #[tauri::command]
+pub async fn count_messages_by_endpoint(
+    state: State<'_ , AppState>,
+    session_id: String,
+    endpoint: String,
+) -> Result<i64, String> {
+    db::count_messages_by_endpoint(&state.db, &session_id, &endpoint)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_messages_by_endpoint(
+    state: State<'_ , AppState>,
+    session_id: String,
+    endpoint: String,
+) -> Result<(), String> {
+    db::delete_messages_by_endpoint(&state.db, &session_id, &endpoint)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn start_session(
     app: AppHandle,
     state: State<'_ , AppState>,
