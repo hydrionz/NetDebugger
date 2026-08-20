@@ -18,6 +18,8 @@
   --danger-bg: #c42b1c;
   --danger-text: #ffffff;
   --danger-hover: #a8251a;
+  --msg-in-bg: #eef4fb;
+  --msg-out-bg: #f0f7ef;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -41,6 +43,8 @@
     --danger-bg: #e05a4a;
     --danger-text: #ffffff;
     --danger-hover: #c74a3c;
+    --msg-in-bg: #2a3342;
+    --msg-out-bg: #2c362c;
   }
 }
 
@@ -64,6 +68,8 @@
   --danger-bg: #c42b1c;
   --danger-text: #ffffff;
   --danger-hover: #a8251a;
+  --msg-in-bg: #eef4fb;
+  --msg-out-bg: #f0f7ef;
 }
 
 :root[data-theme="dark"] {
@@ -86,6 +92,8 @@
     --danger-bg: #e05a4a;
     --danger-text: #ffffff;
     --danger-hover: #c74a3c;
+    --msg-in-bg: #2a3342;
+    --msg-out-bg: #2c362c;
   }
 }
 
@@ -680,12 +688,14 @@ body.resizing-h {
 
 .message.in {
   align-self: flex-start;
-  border-left: 3px solid var(--success);
+  border-left: 4px solid var(--accent);
+  background: var(--msg-in-bg);
 }
 
 .message.out {
   align-self: flex-end;
-  border-right: 3px solid var(--accent);
+  border-right: 4px solid var(--success);
+  background: var(--msg-out-bg);
 }
 
 .message-meta {
