@@ -394,6 +394,89 @@ function hideContextMenu() {
   }
 }
 
+// ===== 消息气泡右键菜单（独立组件，样式与连接右键菜单一致）=====
+let msgMenuEl = null;
+
+function ensureMsgMenu() {
+  if (msgMenuEl) return;
+  msgMenuEl = document.createElement('div');
+  msgMenuEl.className = 'context-menu hidden';
+  msgMenuEl.innerHTML = `
+    <div class="context-menu-item" data-msg-ctx="resend"><span class="ctx-icon">↻</span><span class="ctx-label">再次发送</span></div>
+    <div class="context-menu-item" data-msg-ctx="delete"><span class="ctx-icon">×</span><span class="ctx-label">删除</span></div>
+  `;
+  document.body.appendChild(msgMenuEl);
+
+  msgMenuEl.addEventListener('click', async (e) => {
+    const item = e.target.closest('[data-msg-ctx]');
+    const messageId = msgMenuEl.dataset.targetId;
+    if (!item || item.classList.contains('disabled') || !messageId) return;
+    hideMsgMenu();
+    if (item.dataset.msgCtx === 'resend') {
+      resendMessage(messageId);
+    } else if (item.dataset.msgCtx === 'delete') {
+      await deleteMessage(messageId);
+    }
+  });
+
+  document.addEventListener('click', hideMsgMenu);
+  document.addEventListener('scroll', hideMsgMenu, true);
+}
+
+function showMsgMenu(x, y, messageId) {
+  ensureMsgMenu();
+  msgMenuEl.dataset.targetId = messageId;
+  // 仅文本消息可再次发送
+  const msgs = state.messages.get(state.selectedSessionId) || [];
+  const m = msgs.find((m) => m.id === messageId);
+  msgMenuEl.querySelector('[data-msg-ctx="resend"]').classList.toggle('disabled', !(m && m.payload_type === 'text'));
+  msgMenuEl.classList.remove('hidden');
+  msgMenuEl.style.left = x + 'px';
+  msgMenuEl.style.top = y + 'px';
+  const rect = msgMenuEl.getBoundingClientRect();
+  if (rect.right > window.innerWidth) {
+    msgMenuEl.style.left = Math.max(0, window.innerWidth - rect.width) + 'px';
+  }
+  if (rect.bottom > window.innerHeight) {
+    msgMenuEl.style.top = Math.max(0, window.innerHeight - rect.height) + 'px';
+  }
+}
+
+function hideMsgMenu() {
+  if (msgMenuEl) {
+    msgMenuEl.classList.add('hidden');
+    msgMenuEl.dataset.targetId = '';
+  }
+}
+
+function resendMessage(messageId) {
+  const id = state.selectedSessionId;
+  if (!id) return;
+  const msgs = state.messages.get(id) || [];
+  const m = msgs.find((m) => m.id === messageId);
+  if (!m || m.payload_type !== 'text') return;
+  els.sendInput.value = bytesToText(m.payload);
+  els.sendInput.focus();
+  sendMessage();
+}
+
+async function deleteMessage(messageId) {
+  const id = state.selectedSessionId;
+  if (!id) return;
+  if (!await showConfirm('确定删除这条消息？')) return;
+  try {
+    await invoke('delete_message', { messageId });
+    state.messages.set(id, (state.messages.get(id) || []).filter((m) => m.id !== messageId));
+    if (state.selectedMessageId === messageId) {
+      state.selectedMessageId = null;
+      renderDetail();
+    }
+    renderTimeline();
+  } catch (e) {
+    showError('删除消息失败: ' + e);
+  }
+}
+
 // ===== 快速悬浮提示：原生 title 的延迟由系统控制（较慢），改用 data-tip 自定义提示，悬停立即显示 =====
 const tipEl = document.createElement('div');
 tipEl.className = 'tooltip hidden';
@@ -1057,6 +1140,11 @@ function renderTimeline() {
       </div>
       <div class="message-body">${body}</div>
     `;
+    el.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      showMsgMenu(ev.clientX, ev.clientY, m.id);
+    });
     el.addEventListener('click', () => {
       state.selectedMessageId = m.id;
       // 点击的是搜索命中时，同步活动索引，让 ↑/↓ 从此处继续

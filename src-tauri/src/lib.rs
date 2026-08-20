@@ -204,6 +204,7 @@ pub fn run() {
             commands::clear_messages,
             commands::count_messages_by_endpoint,
             commands::delete_messages_by_endpoint,
+            commands::delete_message,
             commands::start_session,
             commands::stop_session,
             commands::send_message,

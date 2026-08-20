@@ -677,3 +677,13 @@ pub async fn delete_messages_by_endpoint(
     .await
     .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("delete messages by endpoint: {}", e))
 }
+
+pub async fn delete_message(conn: &Connection, message_id: &str) -> Result<()> {
+    let message_id = message_id.to_string();
+    conn.call(move |conn| {
+        conn.execute("DELETE FROM messages WHERE id = ?1", params![&message_id])?;
+        Ok(())
+    })
+    .await
+    .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("delete message: {}", e))
+}

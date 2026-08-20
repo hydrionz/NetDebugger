@@ -217,6 +217,13 @@ pub async fn delete_messages_by_endpoint(
 }
 
 #[tauri::command]
+pub async fn delete_message(state: State<'_ , AppState>, message_id: String) -> Result<(), String> {
+    db::delete_message(&state.db, &message_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn start_session(
     app: AppHandle,
     state: State<'_ , AppState>,
