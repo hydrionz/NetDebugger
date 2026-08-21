@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Net Debugger</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=2" />
 </head>
 <body>
   <div id="app">
@@ -121,6 +121,13 @@
                   </button>
                   <div id="tpl-menu" class="tpl-menu hidden"></div>
                 </span>
+              </label>
+              <label>发送格式:
+                <select id="send-mode">
+                  <option value="text">文本</option>
+                  <option value="hex">Hex</option>
+                  <option value="base64">Base64</option>
+                </select>
               </label>
               <div style="flex:1"></div>
               <button id="btn-clear-input" class="icon-btn" data-tip="清空输入" aria-label="清空输入">

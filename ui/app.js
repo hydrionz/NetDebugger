@@ -40,6 +40,7 @@ const els = {
   detailBody: document.getElementById('detail-body'),
   sendTarget: document.getElementById('send-target'),
   sendInput: document.getElementById('send-input'),
+  sendMode: document.getElementById('send-mode'),
   tplTrigger: document.getElementById('tpl-trigger'),
   tplMenu: document.getElementById('tpl-menu'),
   dlgTemplate: document.getElementById('dlg-template'),
@@ -117,6 +118,11 @@ function bytesToText(bytes) {
   } catch {
     return '[binary]';
   }
+}
+
+// 消息气泡显示的文本：二进制帧显示为十六进制，文本帧显示为 UTF-8 文本
+function msgDisplayText(m) {
+  return m.payload_type === 'binary' ? bytesToHex(m.payload) : bytesToText(m.payload);
 }
 
 // 判断字节流是否为完整 JSON（对象或数组；null 与字面量不算）
@@ -1065,14 +1071,14 @@ function renderTimeline() {
   }
   const q = state.searchQuery.trim().toLowerCase();
   if (q) {
-    msgs = msgs.filter(m => m.payload_type !== 'notice' && bytesToText(m.payload).toLowerCase().includes(q));
+    msgs = msgs.filter(m => m.payload_type !== 'notice' && msgDisplayText(m).toLowerCase().includes(q));
   }
 
   // 重建搜索命中列表（仅在搜索激活时填充），供 ↑/↓ 导航使用
   state.searchHits = [];
   if (q) {
     for (const m of msgs) {
-      const lower = bytesToText(m.payload).toLowerCase();
+      const lower = msgDisplayText(m).toLowerCase();
       let count = 0;
       let pos = 0;
       while ((pos = lower.indexOf(q, pos)) !== -1) {
@@ -1105,7 +1111,7 @@ function renderTimeline() {
     const el = document.createElement('div');
     el.className = 'message ' + m.direction + (m.id === state.selectedMessageId ? ' selected' : '');
     el.dataset.id = m.id;
-    const text = bytesToText(m.payload);
+    const text = msgDisplayText(m);
     const epBadge = m.endpoint ? `<span class="msg-endpoint">${escapeHtml(m.endpoint)}</span>` : '';
     const sender = m.direction === 'in' ? getSenderLabel(id, m) : '';
     const matchCount = hitCountById.get(m.id) || 0;
@@ -1139,8 +1145,7 @@ function renderTimeline() {
     el.innerHTML = `
       <div class="message-meta">
         <span>${formatTime(m.timestamp)}</span>
-        <span>${m.direction === 'in' ? '←' : '→'}</span>
-        <span>${m.payload_type}</span>
+        <span class="msg-type ${m.payload_type === 'binary' ? 'binary' : 'txt'}">${m.payload_type === 'binary' ? 'BIN' : 'TXT'}</span>
         ${epBadge}
         ${sender}
         ${hitBadge}
@@ -1157,8 +1162,9 @@ function renderTimeline() {
       // 点击的是搜索命中时，同步活动索引，让 ↑/↓ 从此处继续
       const idx = state.searchHits.findIndex((h) => h.messageId === m.id);
       if (idx >= 0) state.activeHitIndex = idx;
-      // 完整 JSON 自动切到 JSON tab，其余走文本 tab
-      setDetailTab(isCompleteJson(m.payload) ? 'json' : 'text');
+      // 完整 JSON 自动切到 JSON tab；二进制帧默认切到 Hex tab；其余走文本 tab
+      if (m.payload_type === 'binary') setDetailTab('hex');
+      else setDetailTab(isCompleteJson(m.payload) ? 'json' : 'text');
       renderTimeline();
       renderDetail();
     });
@@ -1358,7 +1364,6 @@ async function sendMessage() {
   if (!id) return;
   const text = els.sendInput.value;
   if (!text) return;
-  const payloadType = 'text';
   const s = findSession(id);
   let clientId = null, endpoint = null;
   if (s && s.role === 'server') {
@@ -1369,10 +1374,29 @@ async function sendMessage() {
     }
   }
 
+  // 根据发送格式把输入转成字节
+  let payload;
+  let payloadType = 'text';
+  const mode = els.sendMode.value;
+  try {
+    if (mode === 'hex') {
+      payload = hexToBytes(text);
+      payloadType = 'binary';
+    } else if (mode === 'base64') {
+      payload = base64ToBytes(text);
+      payloadType = 'binary';
+    } else {
+      payload = new TextEncoder().encode(text);
+    }
+  } catch (e) {
+    showError('格式解析失败: ' + e);
+    return;
+  }
+
   try {
     await invoke('send_message', {
       sessionId: id,
-      payload: text,
+      payload: Array.from(payload),
       payloadType,
       clientId,
       endpoint,
@@ -1381,6 +1405,24 @@ async function sendMessage() {
   } catch (e) {
     showError('发送失败: ' + e);
   }
+}
+
+function hexToBytes(hex) {
+  const clean = hex.replace(/\s+/g, '').replace(/0x/gi, '');
+  if (clean.length % 2 !== 0) throw new Error('Hex 长度必须为偶数');
+  if (!/^[0-9a-fA-F]*$/.test(clean)) throw new Error('Hex 包含非法字符');
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(clean.substr(i * 2, 2), 16);
+  }
+  return out;
+}
+
+function base64ToBytes(b64) {
+  const bin = atob(b64.trim());
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
 async function clearMessages() {

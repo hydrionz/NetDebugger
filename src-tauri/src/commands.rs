@@ -337,7 +337,7 @@ pub async fn disconnect_client(
 pub async fn send_message(
     state: State<'_ , AppState>,
     session_id: String,
-    payload: String,
+    payload: Vec<u8>,
     payload_type: String,
     client_id: Option<String>,
     endpoint: Option<String>,
@@ -364,15 +364,15 @@ pub async fn send_message(
             &session_id,
             Some(&client_id),
             &payload_type_owned,
-            payload.clone().into_bytes(),
+            payload.clone(),
             None,
             &handle,
         )
         .await;
 
         let msg = match payload_type.as_str() {
-            "binary" => ClientMessage::Binary(payload.into_bytes()),
-            _ => ClientMessage::Text(payload),
+            "binary" => ClientMessage::Binary(payload),
+            _ => ClientMessage::Text(String::from_utf8_lossy(&payload).into_owned()),
         };
         client
             .outbound_tx
@@ -382,8 +382,8 @@ pub async fn send_message(
     } else {
         // Send to all (server) or to remote (client).
         let kind = match payload_type.as_str() {
-            "binary" => OutgoingKind::Binary(payload.into_bytes()),
-            _ => OutgoingKind::Text(payload),
+            "binary" => OutgoingKind::Binary(payload),
+            _ => OutgoingKind::Text(String::from_utf8_lossy(&payload).into_owned()),
         };
         let msg = OutgoingMessage { endpoint, kind };
         handle

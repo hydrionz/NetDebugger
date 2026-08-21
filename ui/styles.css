@@ -95,7 +95,6 @@
     --msg-in-bg: #2a3342;
     --msg-out-bg: #2c362c;
   }
-}
 
 * {
   box-sizing: border-box;
@@ -705,6 +704,33 @@ body.resizing-h {
   font-size: 11px;
   margin-bottom: 4px;
   align-items: center;
+}
+
+.msg-type {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+  line-height: 1.4;
+}
+
+.msg-type.txt {
+  background: transparent;
+  color: #8a5a00;
+  border: 1px solid #8a5a00;
+}
+
+.msg-type.binary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+:root[data-theme="dark"] .msg-type.txt {
+  background: transparent;
+  color: #b0831a;
+  border: 1px solid #b0831a;
 }
 
 .msg-hit-count {
