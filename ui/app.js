@@ -1386,7 +1386,9 @@ async function sendMessage() {
       payload = base64ToBytes(text);
       payloadType = 'binary';
     } else {
-      payload = new TextEncoder().encode(text);
+      // 文本模式：若内容为完整 JSON（对象/数组）则自动缩进格式化后再发送
+      const formatted = tryFormatJson(text);
+      payload = new TextEncoder().encode(formatted);
     }
   } catch (e) {
     showError('格式解析失败: ' + e);
@@ -1423,6 +1425,19 @@ function base64ToBytes(b64) {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+// 若内容是完整 JSON（对象/数组）则返回格式化后的缩进文本，否则返回原文本
+function tryFormatJson(text) {
+  const trimmed = text.trim();
+  if (!trimmed) return text;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed !== null && typeof parsed === 'object') {
+      return JSON.stringify(parsed, null, 2);
+    }
+  } catch { /* 非 JSON，原样发送 */ }
+  return text;
 }
 
 async function clearMessages() {
