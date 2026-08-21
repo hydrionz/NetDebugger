@@ -1492,6 +1492,14 @@ els.sessionRole.addEventListener('change', () => {
 document.getElementById('btn-send').addEventListener('click', sendMessage);
 document.getElementById('btn-clear-input').addEventListener('click', () => { els.sendInput.value = ''; els.sendInput.focus(); });
 
+// 全局快捷键：Ctrl+L 清空当前会话消息记录
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'l' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    clearMessages();
+  }
+});
+
 // 发送键模式：'enter' = Enter 发送、Shift+Enter 换行（聊天风格，默认）；
 // 'ctrlEnter' = Ctrl+Enter 发送、Enter 换行（编辑器风格）。
 // 任何修饰键组合下都显式处理：匹配发送则发，否则插入换行（不依赖浏览器默认行为，
@@ -2174,13 +2182,20 @@ function showConfirm(message, html) {
     const done = (val) => {
       ok.removeEventListener('click', onOk);
       cancel.removeEventListener('click', onCancel);
+      dlg.removeEventListener('keydown', onKey);
       dlg.close();
       resolve(val);
     };
     const onOk = () => done(true);
     const onCancel = () => done(false);
+    // Enter 确认，Esc 取消
+    const onKey = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); done(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); done(false); }
+    };
     ok.addEventListener('click', onOk);
     cancel.addEventListener('click', onCancel);
+    dlg.addEventListener('keydown', onKey);
     dlg.showModal();
   });
 }
