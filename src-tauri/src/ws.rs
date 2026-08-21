@@ -341,7 +341,7 @@ pub async fn run_ws_client(
     let mut attempt = 1u32;
 
     loop {
-        let manual_stop = run_ws_client_attempt(
+        let outcome = run_ws_client_attempt(
             &app,
             &db,
             &session_id,
@@ -355,10 +355,15 @@ pub async fn run_ws_client(
         .await;
 
         // 手动停止，或未配置自动重连：彻底关闭并退出
-        if manual_stop || reconnect <= 0 {
+        if matches!(outcome, AttemptOutcome::ManualStop) || reconnect <= 0 {
             set_closed(&app, &db, &session_id, None, Some(&url)).await;
             remove_session_handle(&app, &session_id).await;
             return;
+        }
+
+        // 连接已成功建立过则清零重连次数（从第 1 次重新计）
+        if matches!(outcome, AttemptOutcome::Connected) {
+            attempt = 1;
         }
 
         // 自动重连：等待间隔后重试
@@ -387,8 +392,17 @@ pub async fn run_ws_client(
     }
 }
 
+#[derive(PartialEq)]
+enum AttemptOutcome {
+    /// 手动停止：不再重连
+    ManualStop,
+    /// 连接曾成功建立，之后断开：重连次数清零
+    Connected,
+    /// 从未连上（连接失败）：保留累计重连次数
+    ConnectFailed,
+}
+
 /// 单次客户端连接尝试：连接成功则进入 socket loop，直至断开。
-/// 返回 true 表示手动停止（不再重连）；false 表示连接结束（可能因断开或连接失败）。
 async fn run_ws_client_attempt(
     app: &AppHandle,
     db: &db::DbConnection,
@@ -399,7 +413,7 @@ async fn run_ws_client_attempt(
     handle: &Arc<SessionHandle>,
     outbound_rx: mpsc::Receiver<OutgoingMessage>,
     shutdown_rx: tokio::sync::watch::Receiver<bool>,
-) -> bool {
+) -> AttemptOutcome {
     db::update_session_status(db, session_id, "starting", None, None)
         .await
         .ok();
@@ -410,7 +424,7 @@ async fn run_ws_client_attempt(
         Err(e) => {
             eprintln!("ws client build request error: {}", e);
             emit_error(app, session_id, &format!("构建连接请求失败：{}", e));
-            return false;
+            return AttemptOutcome::ConnectFailed;
         }
     };
     let headers = request.headers_mut();
@@ -431,7 +445,7 @@ async fn run_ws_client_attempt(
         Err(e) => {
             eprintln!("ws client connect error: {}", e);
             emit_error(app, session_id, &format!("连接 {} 失败：{}", url, friendly_connect_error(&e)));
-            return false;
+            return AttemptOutcome::ConnectFailed;
         }
     };
 
@@ -443,7 +457,7 @@ async fn run_ws_client_attempt(
     emit_status(app, session_id, "running", None, Some(remote_addr.clone()));
     persist_notice(db, handle, session_id, format!("与服务端【{}】的连接已成功建立", display_addr(&remote_addr))).await;
 
-    run_socket_loop(
+    let manual_stop = run_socket_loop(
         app.clone(),
         db.clone(),
         session_id.to_string(),
@@ -454,7 +468,13 @@ async fn run_ws_client_attempt(
         remote_addr,
         endpoint,
     )
-    .await
+    .await;
+
+    if manual_stop {
+        AttemptOutcome::ManualStop
+    } else {
+        AttemptOutcome::Connected
+    }
 }
 
 async fn run_socket_loop<S>(

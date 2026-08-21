@@ -1563,7 +1563,8 @@ function renderTemplateMenu() {
 }
 
 function updateTplTrigger() {
-  if (els.tplTrigger.firstChild) els.tplTrigger.firstChild.textContent = state.activeTemplate || '选择快捷指令…';
+  const label = document.getElementById('tpl-trigger-label');
+  if (label) label.textContent = state.activeTemplate || '选择快捷指令…';
 }
 
 function toggleTemplateMenu() {
