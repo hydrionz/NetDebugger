@@ -67,6 +67,7 @@ const els = {
   sessionUrl: document.getElementById('session-url'),
   sessionClientEndpoint: document.getElementById('session-client-endpoint'),
   sessionAutoReconnect: document.getElementById('session-auto-reconnect'),
+  sessionHeartbeat: document.getElementById('session-heartbeat'),
   endpointList: document.getElementById('endpoint-list'),
   endpointInput: document.getElementById('endpoint-input'),
   btnEndpointAdd: document.getElementById('btn-endpoint-add'),
@@ -564,6 +565,7 @@ function openSessionDialog(projectId) {
   els.sessionUrl.value = '127.0.0.1:8080';
   els.sessionClientEndpoint.value = '';
   els.sessionAutoReconnect.value = '30';
+  els.sessionHeartbeat.value = '0';
   state.endpointDraft = [];
   renderEndpointList();
   state.headerDraft = [];
@@ -598,6 +600,7 @@ function openEditSessionDialog(session) {
     // 目标地址回显：去掉 ws:// 前缀，只显示 host:port（若历史数据带前缀则剥掉）
     els.sessionUrl.value = stripWsPrefix(session.target_url || '');
     els.sessionAutoReconnect.value = session.auto_reconnect != null ? String(session.auto_reconnect) : '30';
+    els.sessionHeartbeat.value = session.heartbeat_interval != null ? String(session.heartbeat_interval) : '0';
     state.headerDraft = Object.entries(session.headers || {}).map(([key, value]) => ({ key, value }));
     renderHeaderList();
     state.subprotocolDraft = (session.subprotocols || []).slice();
@@ -798,6 +801,9 @@ async function saveSession() {
   const autoReconnect = isServer
     ? null
     : (els.sessionAutoReconnect.value.trim() === '' ? 0 : Math.max(0, parseInt(els.sessionAutoReconnect.value.trim(), 10) || 0));
+  const heartbeatInterval = isServer
+    ? null
+    : (els.sessionHeartbeat.value.trim() === '' ? 0 : Math.max(0, parseInt(els.sessionHeartbeat.value.trim(), 10) || 0));
   const req = {
     project_id: projectId || null,
     name: name || null,
@@ -809,6 +815,7 @@ async function saveSession() {
     headers: isServer || !state.headerDraft.length ? null : Object.fromEntries(state.headerDraft.map((h) => [h.key, h.value])),
     subprotocols: isServer || !state.subprotocolDraft.length ? null : state.subprotocolDraft.slice(),
     auto_reconnect: autoReconnect,
+    heartbeat_interval: heartbeatInterval,
   };
   try {
     if (editId) {
@@ -1273,6 +1280,8 @@ function updateSendArea() {
   els.sendInput.disabled = !isConnected;
   els.sendTarget.disabled = !isConnected;
   document.getElementById('btn-send').disabled = !isConnected;
+  document.getElementById('btn-send-ping').disabled = !isConnected;
+  if (!isConnected) document.getElementById('heartbeat-status')?.classList.add('hidden');
 
   if (s.role === 'server') {
     if (targetLabel) targetLabel.style.display = '';
@@ -1517,6 +1526,54 @@ document.addEventListener('keydown', (e) => {
     clearMessages();
   }
 });
+
+// ===== Ping / 心跳监控 =====
+const btnSendPing = document.getElementById('btn-send-ping');
+btnSendPing.addEventListener('click', async () => {
+  const id = state.selectedSessionId;
+  if (!id) return;
+  try {
+    await invoke('send_ping', { sessionId: id });
+  } catch (e) {
+    showError('Ping 发送失败: ' + e);
+  }
+});
+
+// 心跳状态轮询（1 秒）：显示最近 Ping/Pong 与往返延迟，超时标红
+function renderHeartbeatStatus(st, sessionStatus) {
+  const el = document.getElementById('heartbeat-status');
+  if (!el) return;
+  const active = st && st.running && sessionStatus === 'running';
+  if (!active || (!st.last_ping_at && !st.last_pong_at)) {
+    el.classList.add('hidden');
+    return;
+  }
+  const now = Date.now();
+  const ago = (ts) => ts ? Math.round((now - ts) / 1000) : null;
+  const pongAgo = ago(st.last_pong_at);
+  // 超时判定：有 Ping 无 Pong 且已超过 10 秒
+  const timedOut = st.last_ping_at && (!st.last_pong_at || st.last_pong_at < st.last_ping_at) && (now - st.last_ping_at > 10000);
+  let text;
+  if (st.rtt_ms != null) {
+    text = `延迟 ${st.rtt_ms} ms · Pong ${pongAgo}s 前`;
+  } else if (timedOut) {
+    text = '心跳超时';
+  } else {
+    text = `等待 Pong…`;
+  }
+  el.textContent = text;
+  el.classList.toggle('heartbeat-timeout', !!timedOut);
+}
+
+setInterval(async () => {
+  const id = state.selectedSessionId;
+  const s = id ? findSession(id) : null;
+  if (!id || !s || s.status !== 'running') return;
+  try {
+    const st = await invoke('get_heartbeat_status', { sessionId: id });
+    renderHeartbeatStatus(st, s.status);
+  } catch { /* ignore */ }
+}, 1000);
 
 // 发送键模式：'enter' = Enter 发送、Shift+Enter 换行（聊天风格，默认）；
 // 'ctrlEnter' = Ctrl+Enter 发送、Enter 换行（编辑器风格）。

@@ -19,6 +19,7 @@ pub struct CreateSessionRequest {
     headers: Option<HashMap<String, String>>,
     subprotocols: Option<Vec<String>>,
     auto_reconnect: Option<i64>,
+    heartbeat_interval: Option<i64>,
 }
 
 #[tauri::command]
@@ -69,6 +70,7 @@ pub async fn create_session(
         headers,
         subprotocols,
         req.auto_reconnect,
+        req.heartbeat_interval,
     )
     .await
     .map_err(|e| e.to_string())
@@ -85,6 +87,7 @@ pub struct UpdateSessionRequest {
     headers: Option<HashMap<String, String>>,
     subprotocols: Option<Vec<String>>,
     auto_reconnect: Option<i64>,
+    heartbeat_interval: Option<i64>,
 }
 
 /// 校验并规范化 endpoint 路径列表：trim、跳过空串、必须 / 开头、无空白与 ?#、去重保序；全空 → None。
@@ -167,6 +170,7 @@ pub async fn update_session(
         headers,
         subprotocols,
         req.auto_reconnect,
+        req.heartbeat_interval,
     )
     .await
     .map_err(|e| e.to_string())
@@ -370,6 +374,7 @@ pub async fn start_session(
         headers: session.headers.clone(),
         subprotocols: session.subprotocols.clone(),
         auto_reconnect: session.auto_reconnect,
+        heartbeat_interval: session.heartbeat_interval,
     };
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
@@ -379,6 +384,9 @@ pub async fn start_session(
         shutdown_tx,
         outbound_tx: Arc::new(tokio::sync::Mutex::new(outbound_tx)),
         clients: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        last_ping_at: Arc::new(tokio::sync::Mutex::new(None)),
+        last_pong_at: Arc::new(tokio::sync::Mutex::new(None)),
+        manual_ping_pending: Arc::new(tokio::sync::Mutex::new(false)),
     });
 
     {
@@ -525,6 +533,54 @@ pub async fn subscribe_timeline(
         .await
         .insert(session_id, channel);
     Ok(())
+}
+
+/// 手动发送 Ping 控制帧：客户端会话 ping 服务端；服务端会话广播给所有已连客户端。
+#[tauri::command]
+pub async fn send_ping(state: State<'_ , AppState>, session_id: String) -> Result<(), String> {
+    let handle = {
+        let sessions = state.sessions.read().await;
+        sessions.get(&session_id).cloned()
+    };
+    let handle = handle.ok_or_else(|| "session not running".to_string())?;
+
+    *handle.last_ping_at.lock().await = Some(chrono::Utc::now().timestamp_millis());
+    *handle.manual_ping_pending.lock().await = true;
+    let msg = OutgoingMessage { endpoint: None, kind: OutgoingKind::Ping };
+    let result = handle
+        .outbound_tx
+        .lock()
+        .await
+        .send(msg)
+        .await;
+    result.map_err(|_| "outbound channel closed".to_string())
+}
+
+/// 查询心跳状态（供前端轮询展示）。
+#[tauri::command]
+pub async fn get_heartbeat_status(
+    state: State<'_ , AppState>,
+    session_id: String,
+) -> Result<serde_json::Value, String> {
+    let handle = {
+        let sessions = state.sessions.read().await;
+        sessions.get(&session_id).cloned()
+    };
+    let Some(handle) = handle else {
+        return Ok(serde_json::json!({ "running": false }));
+    };
+    let last_ping_at = *handle.last_ping_at.lock().await;
+    let last_pong_at = *handle.last_pong_at.lock().await;
+    let rtt_ms = match (last_ping_at, last_pong_at) {
+        (Some(ping), Some(pong)) if pong >= ping => Some(pong - ping),
+        _ => None,
+    };
+    Ok(serde_json::json!({
+        "running": true,
+        "last_ping_at": last_ping_at,
+        "last_pong_at": last_pong_at,
+        "rtt_ms": rtt_ms,
+    }))
 }
 
 #[tauri::command]

@@ -210,6 +210,8 @@ pub fn run() {
             commands::stop_session,
             commands::send_message,
             commands::subscribe_timeline,
+            commands::send_ping,
+            commands::get_heartbeat_status,
             commands::list_clients,
             commands::update_client_name,
             commands::disconnect_client,

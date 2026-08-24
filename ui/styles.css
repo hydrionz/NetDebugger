@@ -722,6 +722,17 @@ body.resizing-h {
   line-height: 1.4;
 }
 
+.heartbeat-status {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.heartbeat-status.heartbeat-timeout {
+  color: var(--error);
+  font-weight: 600;
+}
+
 .msg-type.txt {
   background: transparent;
   color: #8a5a00;

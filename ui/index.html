@@ -137,6 +137,16 @@
                   <option value="base64">Base64</option>
                 </select>
               </label>
+              <button id="btn-send-ping" class="icon-btn" data-tip="发送 Ping 控制帧" aria-label="Ping">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/>
+                  <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/>
+                  <circle cx="12" cy="12" r="2"/>
+                  <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/>
+                  <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>
+                </svg>
+              </button>
+              <span id="heartbeat-status" class="heartbeat-status hidden"></span>
               <div style="flex:1"></div>
               <button id="btn-clear-input" class="icon-btn" data-tip="清空输入" aria-label="清空输入">
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -219,6 +229,7 @@
         <label>目标地址: <input type="text" id="session-url" placeholder="如 127.0.0.1:8080（只填地址端口）" value="127.0.0.1:8080" /></label>
         <label>Endpoint 路径: <input type="text" id="session-client-endpoint" placeholder="如 /echo（可选，拼接到目标地址后）" /></label>
         <label>自动重连（秒）: <input type="number" id="session-auto-reconnect" placeholder="0 = 关闭" value="30" min="0" inputmode="numeric" /></label>
+        <label>自动心跳（秒）: <input type="number" id="session-heartbeat" placeholder="0 = 关闭" value="0" min="0" inputmode="numeric" /></label>
         <div class="endpoint-list-editor">
           <div class="endpoint-list-title">自定义请求头（握手时发送）</div>
           <div id="header-list" class="endpoint-list"></div>

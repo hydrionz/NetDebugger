@@ -172,11 +172,22 @@ pub async fn run_ws_server(
                 // the OutgoingMessage carries Some(path)). Persist exactly once for
                 // the logical broadcast action (client_id = None means "sent to all"),
                 // regardless of how many clients are currently connected.
+                // Ping 控制帧：广播给所有已连客户端（不持久化为普通消息）
+                if matches!(&out, Some(OutgoingMessage { kind: OutgoingKind::Ping, .. })) {
+                    let n = handle.clients.read().await.len();
+                    persist_notice(&db, &handle, &session_id, format!("→ Ping（广播 {} 个客户端）", n)).await;
+                    let clients = handle.clients.read().await;
+                    for c in clients.values() {
+                        let _ = c.outbound_tx.send(ClientMessage::Ping).await;
+                    }
+                    continue;
+                }
                 let (msg_endpoint, payload_type, payload_bytes, client_msg) = match out {
                     Some(OutgoingMessage { endpoint: Some(ep), kind: OutgoingKind::Text(t) }) => (Some(ep), "text", t.clone().into_bytes(), ClientMessage::Text(t)),
                     Some(OutgoingMessage { endpoint: Some(ep), kind: OutgoingKind::Binary(b) }) => (Some(ep), "binary", b.clone(), ClientMessage::Binary(b)),
                     Some(OutgoingMessage { endpoint: None, kind: OutgoingKind::Text(t) }) => (None, "text", t.clone().into_bytes(), ClientMessage::Text(t)),
                     Some(OutgoingMessage { endpoint: None, kind: OutgoingKind::Binary(b) }) => (None, "binary", b.clone(), ClientMessage::Binary(b)),
+                    Some(OutgoingMessage { kind: OutgoingKind::Ping, .. }) => unreachable!("ping handled above"),
                     None => break,
                 };
                 persist_out_message(&db, &session_id, None, payload_type, payload_bytes, msg_endpoint.as_deref(), &handle).await;
@@ -189,6 +200,7 @@ pub async fn run_ws_server(
                     let _ = c.outbound_tx.send(match &client_msg {
                         ClientMessage::Text(t) => ClientMessage::Text(t.clone()),
                         ClientMessage::Binary(b) => ClientMessage::Binary(b.clone()),
+                        ClientMessage::Ping => ClientMessage::Ping,
                     }).await;
                 }
             }
@@ -238,11 +250,23 @@ async fn run_client_socket_loop<S>(
                     Some(Ok(WsMessage::Binary(bin))) => {
                         persist_in_message(&db, &session_id, Some(&client_id), "binary", bin.to_vec(), Some(&endpoint), Some(remote_addr_ref), &handle).await;
                     }
+                    Some(Ok(WsMessage::Pong(_))) => {
+                        // 客户端响应了服务端的 Ping：记录时间；手动 Ping 时在时间线展示往返延迟
+                        let now = chrono::Utc::now().timestamp_millis();
+                        *handle.last_pong_at.lock().await = Some(now);
+                        let was_manual = { let p = *handle.manual_ping_pending.lock().await; p };
+                        if was_manual {
+                            if let Some(ping_at) = *handle.last_ping_at.lock().await {
+                                persist_notice(&db, &handle, &session_id, format!("← Pong【{}】（{} ms）", remote_addr_ref, (now - ping_at).max(0))).await;
+                            }
+                            *handle.manual_ping_pending.lock().await = false;
+                        }
+                    }
                     Some(Ok(WsMessage::Close(_))) | None => {
                         break;
                     }
                     Some(Ok(_)) => {
-                        // Ping/Pong ignored.
+                        // 对端发来的 Ping 由库自动回 Pong。
                     }
                     Some(Err(e)) => {
                         eprintln!("ws read error: {}", e);
@@ -262,6 +286,9 @@ async fn run_client_socket_loop<S>(
                     }
                     Some(ClientMessage::Binary(bin)) => {
                         write.send(WsMessage::Binary(bin.into())).await
+                    }
+                    Some(ClientMessage::Ping) => {
+                        write.send(WsMessage::Ping(Vec::new().into())).await
                     }
                     None => break,
                 };
@@ -348,6 +375,7 @@ pub async fn run_ws_client(
             &config,
             &url,
             endpoint.clone(),
+            config.heartbeat_interval.filter(|v| *v > 0),
             &handle,
             outbound_rx,
             shutdown_rx.clone(),
@@ -410,6 +438,7 @@ async fn run_ws_client_attempt(
     config: &WsConfig,
     url: &str,
     endpoint: Option<String>,
+    heartbeat_interval: Option<i64>,
     handle: &Arc<SessionHandle>,
     outbound_rx: mpsc::Receiver<OutgoingMessage>,
     shutdown_rx: tokio::sync::watch::Receiver<bool>,
@@ -463,6 +492,7 @@ async fn run_ws_client_attempt(
         session_id.to_string(),
         ws_stream,
         handle.clone(),
+        heartbeat_interval,
         outbound_rx,
         shutdown_rx,
         remote_addr,
@@ -483,6 +513,7 @@ async fn run_socket_loop<S>(
     session_id: String,
     ws_stream: tokio_tungstenite::WebSocketStream<S>,
     handle: Arc<SessionHandle>,
+    heartbeat_interval: Option<i64>,
     mut outbound_rx: mpsc::Receiver<OutgoingMessage>,
     mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
     remote_addr: String,
@@ -495,6 +526,19 @@ where
     let endpoint_ref = endpoint.as_deref();
     let mut manually_stopped = false;
 
+    // 心跳：自动 Ping 定时器 + 超时检测（超时阈值 10 秒）
+    const HEARTBEAT_TIMEOUT_MS: i64 = 10_000;
+    let mut hb_tick = match heartbeat_interval {
+        Some(secs) => {
+            let mut i = tokio::time::interval(std::time::Duration::from_secs(secs as u64));
+            i.tick().await; // 第一次 tick 立即返回，跳过
+            Some(i)
+        }
+        None => None,
+    };
+    let mut manual_ping_pending = false;
+    let mut timeout_reported = false;
+
     loop {
         tokio::select! {
             msg = read.next() => {
@@ -505,11 +549,23 @@ where
                     Some(Ok(WsMessage::Binary(bin))) => {
                         persist_in_message(&db, &session_id, None, "binary", bin.to_vec(), endpoint_ref, None, &handle).await;
                     }
+                    Some(Ok(WsMessage::Pong(_))) => {
+                        // 对端响应了我们的 Ping：记录时间；手动 Ping 时在时间线展示往返延迟
+                        let now = chrono::Utc::now().timestamp_millis();
+                        *handle.last_pong_at.lock().await = Some(now);
+                        timeout_reported = false;
+                        if manual_ping_pending {
+                            manual_ping_pending = false;
+                            if let Some(ping_at) = *handle.last_ping_at.lock().await {
+                                persist_notice(&db, &handle, &session_id, format!("← Pong（{} ms）", (now - ping_at).max(0))).await;
+                            }
+                        }
+                    }
                     Some(Ok(WsMessage::Close(_))) | None => {
                         break;
                     }
                     Some(Ok(_)) => {
-                        // Ping/Pong ignored.
+                        // 对端发来的 Ping 由库自动回 Pong。
                     }
                     Some(Err(e)) => {
                         eprintln!("ws read error: {}", e);
@@ -527,10 +583,35 @@ where
                         persist_out_message(&db, &session_id, None, "binary", bin.clone(), endpoint_ref, &handle).await;
                         write.send(WsMessage::Binary(bin.into())).await
                     }
+                    Some(OutgoingMessage { kind: OutgoingKind::Ping, .. }) => {
+                        // 手动 Ping：时间线提示，等待 Pong 展示延迟
+                        *handle.last_ping_at.lock().await = Some(chrono::Utc::now().timestamp_millis());
+                        manual_ping_pending = true;
+                        persist_notice(&db, &handle, &session_id, "→ Ping".to_string()).await;
+                        write.send(WsMessage::Ping(Vec::new().into())).await
+                    }
                     None => break,
                 };
                 if let Err(e) = result {
                     eprintln!("ws write error: {}", e);
+                    break;
+                }
+            }
+            _ = async { match hb_tick.as_mut() { Some(t) => { t.tick().await; }, None => std::future::pending::<()>().await } }, if hb_tick.is_some() => {
+                // 自动心跳：检查上次 Ping 是否超时未回，然后发下一个 Ping
+                let now = chrono::Utc::now().timestamp_millis();
+                let last_ping = *handle.last_ping_at.lock().await;
+                let last_pong = *handle.last_pong_at.lock().await;
+                let unanswered = matches!(last_ping, Some(lp) if now - lp > HEARTBEAT_TIMEOUT_MS && last_pong.map_or(true, |lo| lo < lp));
+                if unanswered && !timeout_reported {
+                    timeout_reported = true;
+                    persist_notice(&db, &handle, &session_id, "心跳超时，连接可能已断开".to_string()).await;
+                }
+                // 发起新一轮 Ping；timeout_reported 保持为 true 直到收到 Pong 才复位，
+                // 避免持续无响应时每个周期重复提示。
+                *handle.last_ping_at.lock().await = Some(now);
+                if let Err(e) = write.send(WsMessage::Ping(Vec::new().into())).await {
+                    eprintln!("ws heartbeat ping error: {}", e);
                     break;
                 }
             }

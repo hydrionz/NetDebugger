@@ -12,6 +12,7 @@ pub struct WsConfig {
     pub headers: Option<HashMap<String, String>>,
     pub subprotocols: Option<Vec<String>>,
     pub auto_reconnect: Option<i64>,
+    pub heartbeat_interval: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -24,12 +25,16 @@ pub struct OutgoingMessage {
 pub enum OutgoingKind {
     Text(String),
     Binary(Vec<u8>),
+    /// 手动 Ping（时间线记录 Pong 往返）；自动心跳不走此通道
+    Ping,
 }
 
 #[derive(Debug, Clone)]
 pub enum ClientMessage {
     Text(String),
     Binary(Vec<u8>),
+    /// 服务端手动 Ping 某客户端
+    Ping,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -74,6 +79,12 @@ pub struct SessionHandle {
     // 可变（自动重连时会重建 outbound channel），故用 Mutex 包裹以便经 Arc 共享更新
     pub outbound_tx: Arc<Mutex<mpsc::Sender<OutgoingMessage>>>,
     pub clients: Arc<RwLock<HashMap<String, ClientHandle>>>,
+    /// 心跳监控：最近一次发出 Ping 的时间（毫秒时间戳）
+    pub last_ping_at: Arc<Mutex<Option<i64>>>,
+    /// 心跳监控：最近一次收到 Pong 的时间
+    pub last_pong_at: Arc<Mutex<Option<i64>>>,
+    /// 最近一次 Ping 是否为手动触发（用于时间线展示往返延迟）
+    pub manual_ping_pending: Arc<Mutex<bool>>,
 }
 
 pub struct AppState {
