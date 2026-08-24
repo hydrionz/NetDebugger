@@ -16,9 +16,9 @@ jobs:
         include:
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
-          - platform: macos-latest
-            target: aarch64-apple-darwin
-          # TODO: 项目成熟后取消注释以支持 Linux 构建
+          # TODO: 项目成熟后取消注释以支持 macOS / Linux 构建
+          # - platform: macos-latest
+          #   target: aarch64-apple-darwin
           # - platform: ubuntu-22.04
           #   target: x86_64-unknown-linux-gnu
 
@@ -59,15 +59,6 @@ jobs:
             src-tauri/target/release/bundle/nsis/*.nsis.zip
             src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
 
-      - name: Upload macOS artifacts
-        if: matrix.platform == 'macos-latest'
-        uses: actions/upload-artifact@v5
-        with:
-          name: macos
-          path: |
-            src-tauri/target/release/bundle/macos/*.app.tar.gz
-            src-tauri/target/release/bundle/macos/*.app.tar.gz.sig
-
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -98,15 +89,11 @@ jobs:
 
           WIN_NSIS_ZIP=$(find_file artifacts/windows '*_x64-setup.nsis.zip')
           WIN_SIG_FILE=$(find_file artifacts/windows '*.nsis.zip.sig')
-          MACOS_TAR=$(find_file artifacts/macos '*_aarch64.app.tar.gz')
-          MACOS_SIG_FILE=$(find_file artifacts/macos '*.app.tar.gz.sig')
 
           # Read signatures
           WIN_SIG=$( [ -n "$WIN_SIG_FILE" ] && cat "$WIN_SIG_FILE" || echo "" )
-          MACOS_SIG=$( [ -n "$MACOS_SIG_FILE" ] && cat "$MACOS_SIG_FILE" || echo "" )
 
           echo "WIN_NSIS_ZIP=$WIN_NSIS_ZIP"
-          echo "MACOS_TAR=$MACOS_TAR"
 
           jq -n \
             --arg version "v${VERSION}" \
@@ -114,15 +101,12 @@ jobs:
             --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg win_sig "$WIN_SIG" \
             --arg win_url "${BASE_URL}/$(basename $WIN_NSIS_ZIP)" \
-            --arg mac_sig "$MACOS_SIG" \
-            --arg mac_url "${BASE_URL}/$(basename $MACOS_TAR)" \
             '{
               version: $version,
               notes: $notes,
               pub_date: $pub_date,
               platforms: {
-                "windows-x86_64": { signature: $win_sig, url: $win_url },
-                "darwin-aarch64": { signature: $mac_sig, url: $mac_url }
+                "windows-x86_64": { signature: $win_sig, url: $win_url }
               }
             }' > latest.json
 
