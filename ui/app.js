@@ -145,9 +145,26 @@ function findSession(id) {
   return null;
 }
 
+// 运行时状态缓存：记录事件推送的最新 status，防止 loadProjects 用过期 DB 快照覆盖
+const runtimeStatus = new Map();
+
+function recordRuntimeStatus(sessionId, patch) {
+  const cur = runtimeStatus.get(sessionId) || {};
+  runtimeStatus.set(sessionId, { ...cur, ...patch });
+  const s = findSession(sessionId);
+  if (s) Object.assign(s, patch);
+}
+
 async function loadProjects() {
   try {
     state.projects = await invoke('list_projects');
+    // 回填运行时状态（DB 快照可能滞后于实际运行状态）
+    for (const p of state.projects) {
+      for (const s of p.sessions) {
+        const rt = runtimeStatus.get(s.id);
+        if (rt) Object.assign(s, rt);
+      }
+    }
     renderProjectTree();
     updateSessionDialogProjects();
   } catch (e) {
@@ -942,12 +959,14 @@ async function selectSession(id, endpoint) {
     } else if (event.type === 'Notice') {
       appendNotice(id, event.data);
     } else if (event.type === 'Status') {
-      const s = findSession(event.data.session_id);
-      if (s) {
-        s.status = event.data.status;
-        s.local_addr = event.data.local_addr;
-        s.remote_addr = event.data.remote_addr;
-        renderProjectTree();
+      recordRuntimeStatus(event.data.session_id, {
+        status: event.data.status,
+        local_addr: event.data.local_addr,
+        remote_addr: event.data.remote_addr,
+      });
+      renderProjectTree();
+      if (state.selectedSessionId === event.data.session_id) {
+        updateSendArea();
       }
     }
   });
@@ -1279,8 +1298,9 @@ function updateSendArea() {
   const isConnected = s.status === 'running';
   els.sendInput.disabled = !isConnected;
   els.sendTarget.disabled = !isConnected;
-  document.getElementById('btn-send').disabled = !isConnected;
-  document.getElementById('btn-send-ping').disabled = !isConnected;
+  const noClient = s.role === 'server' && (state.clients.get(id) || []).length === 0;
+  document.getElementById('btn-send').disabled = !isConnected || noClient;
+  document.getElementById('btn-send-ping').disabled = !isConnected || noClient;
   if (!isConnected) document.getElementById('heartbeat-status')?.classList.add('hidden');
 
   if (s.role === 'server') {
@@ -2035,16 +2055,15 @@ document.getElementById('btn-copy-message').addEventListener('click', async () =
 listen('session:status', (ev) => {
   // TimelineEvent 是用 tag=data 序列化的，所以读 data 字段
   const data = ev.payload.data || ev.payload;
-  const s = findSession(data.session_id);
-  if (s) {
-    s.status = data.status;
-    s.local_addr = data.local_addr;
-    s.remote_addr = data.remote_addr;
-    renderProjectTree();
-    // 如果当前选中的是这个会话，更新发送区域状态
-    if (state.selectedSessionId === data.session_id) {
-      updateSendArea();
-    }
+  recordRuntimeStatus(data.session_id, {
+    status: data.status,
+    local_addr: data.local_addr,
+    remote_addr: data.remote_addr,
+  });
+  renderProjectTree();
+  // 如果当前选中的是这个会话，更新发送区域状态
+  if (state.selectedSessionId === data.session_id) {
+    updateSendArea();
   }
 }).catch((e) => console.error('listen session:status failed', e));
 
