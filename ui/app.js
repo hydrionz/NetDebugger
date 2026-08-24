@@ -90,6 +90,7 @@ const els = {
 };
 
 let detailTab = 'text';
+let jsonSubTab = localStorage.getItem('json-subtab') || 'code';
 
 function formatTime(ts) {
   const d = new Date(ts);
@@ -1236,8 +1237,13 @@ function renderDetailBody(m) {
     const text = bytesToText(bytes);
     const q = state.searchQuery.trim();
     try {
-      const pretty = JSON.stringify(JSON.parse(text), null, 2);
-      els.detailBody.innerHTML = highlightJson(pretty, q);
+      const parsed = JSON.parse(text);
+      if (jsonSubTab === 'tree') {
+        els.detailBody.innerHTML = `<div class="j-tree">${buildJsonTree(parsed, q, 0)}</div>`;
+      } else {
+        const pretty = JSON.stringify(parsed, null, 2);
+        els.detailBody.innerHTML = highlightJson(pretty, q);
+      }
     } catch {
       els.detailBody.textContent = '不是有效的 JSON';
     }
@@ -1246,6 +1252,42 @@ function renderDetailBody(m) {
     const q = state.searchQuery.trim();
     els.detailBody.innerHTML = q ? highlightText(text, q) : escapeHtml(text);
   }
+}
+
+function buildJsonTree(value, query, depth) {
+  const searchRe = query ? new RegExp(escapeRegExp(query), 'gi') : null;
+  const hl = (s) => searchRe ? escapeHtml(s).replace(searchRe, (m) => `<mark>${m}</mark>`) : escapeHtml(s);
+  const isObj = value !== null && typeof value === 'object';
+  if (!isObj) {
+    let cls = 'j-num';
+    let txt;
+    if (typeof value === 'string') { cls = 'j-str'; txt = `"${value}"`; }
+    else if (typeof value === 'boolean') { cls = 'j-bool'; txt = String(value); }
+    else if (value === null) { cls = 'j-null'; txt = 'null'; }
+    else { txt = String(value); }
+    return `<span class="${cls}">${hl(txt)}</span>`;
+  }
+  const isArray = Array.isArray(value);
+  const entries = isArray ? value.map((v, i) => [i, v]) : Object.entries(value);
+  if (entries.length === 0) return isArray ? '[]' : '{}';
+  const collapsed = depth >= 2 ? ' j-collapsed' : '';
+  const summary = isArray ? `Array(${entries.length})` : `Object{${entries.length}}`;
+  const open = isArray ? '[' : '{';
+  const close = isArray ? ']' : '}';
+  let html = `<div class="j-node${collapsed}">`;
+  html += `<span class="j-toggle">${depth >= 2 ? '▶' : '▼'}</span>`;
+  html += `<span class="j-summary${collapsed ? '' : ' hidden'}">${hl(summary)}</span>`;
+  html += `<span class="j-bracket">${open}</span>`;
+  html += `<div class="j-children">`;
+  entries.forEach(([k, v], idx) => {
+    html += `<div class="j-line">`;
+    if (!isArray) html += `<span class="j-key">"${hl(String(k))}"</span>: `;
+    html += buildJsonTree(v, query, depth + 1);
+    if (idx < entries.length - 1) html += `,`;
+    html += `</div>`;
+  });
+  html += `</div><span class="j-bracket">${close}</span></div>`;
+  return html;
 }
 
 // JSON 语法高亮（先转义 HTML，再按 token 类型包裹 span）。
@@ -2018,6 +2060,17 @@ function setDetailTab(tab) {
   document.querySelectorAll('.detail-tabs button[data-tab]').forEach((b) => {
     b.classList.toggle('active', b.dataset.tab === tab);
   });
+  document.getElementById('json-subtabs')?.classList.toggle('hidden', tab !== 'json');
+}
+
+function setJsonSubTab(tab) {
+  if (jsonSubTab === tab) return;
+  jsonSubTab = tab;
+  try { localStorage.setItem('json-subtab', tab); } catch {}
+  document.querySelectorAll('#json-subtabs button[data-json-subtab]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.jsonSubtab === tab);
+  });
+  renderDetail();
 }
 
 document.querySelectorAll('.detail-tabs button[data-tab]').forEach((btn) => {
@@ -2025,6 +2078,26 @@ document.querySelectorAll('.detail-tabs button[data-tab]').forEach((btn) => {
     setDetailTab(btn.dataset.tab);
     renderDetail();
   });
+});
+
+// JSON 子标签切换
+document.querySelectorAll('#json-subtabs button[data-json-subtab]').forEach((btn) => {
+  btn.classList.toggle('active', btn.dataset.jsonSubtab === jsonSubTab);
+  btn.addEventListener('click', () => setJsonSubTab(btn.dataset.jsonSubtab));
+});
+document.getElementById('json-subtabs')?.classList.toggle('hidden', detailTab !== 'json');
+
+// 树形折叠：点击箭头或 ... 切换
+document.getElementById('detail-body')?.addEventListener('click', (e) => {
+  const t = e.target.closest('.j-toggle, .j-summary');
+  if (!t) return;
+  const node = t.closest('.j-node');
+  if (!node) return;
+  const collapsed = node.classList.toggle('j-collapsed');
+  const toggle = node.querySelector(':scope > .j-toggle');
+  if (toggle) toggle.textContent = collapsed ? '▶' : '▼';
+  const summary = node.querySelector(':scope > .j-summary');
+  if (summary) summary.classList.toggle('hidden', !collapsed);
 });
 
 document.getElementById('btn-copy-message').addEventListener('click', async () => {
