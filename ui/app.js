@@ -1492,6 +1492,24 @@ els.sessionRole.addEventListener('change', () => {
 document.getElementById('btn-send').addEventListener('click', sendMessage);
 document.getElementById('btn-clear-input').addEventListener('click', () => { els.sendInput.value = ''; els.sendInput.focus(); });
 
+// 导出消息历史：弹框选择 JSON / 文本格式，调用后端保存（用户取消则不提示）
+async function exportMessages(format) {
+  const id = state.selectedSessionId;
+  if (!id) return;
+  try {
+    const path = await invoke('export_messages', { sessionId: id, format });
+    if (path) showToast('已导出到 ' + path);
+  } catch (e) {
+    showError('导出失败: ' + e);
+  }
+}
+
+const dlgExport = document.getElementById('dlg-export');
+document.getElementById('btn-export').addEventListener('click', () => dlgExport.showModal());
+document.getElementById('btn-export-cancel').addEventListener('click', () => dlgExport.close());
+document.getElementById('btn-export-json').addEventListener('click', () => { dlgExport.close(); exportMessages('json'); });
+document.getElementById('btn-export-text').addEventListener('click', () => { dlgExport.close(); exportMessages('text'); });
+
 // 全局快捷键：Ctrl+L 清空当前会话消息记录
 document.addEventListener('keydown', (e) => {
   if (e.key === 'l' && (e.ctrlKey || e.metaKey)) {

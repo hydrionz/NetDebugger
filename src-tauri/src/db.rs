@@ -650,6 +650,36 @@ pub async fn clear_messages(conn: &Connection, session_id: &str) -> Result<()> {
     .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("clear messages: {}", e))
 }
 
+/// 导出用：加载会话全部消息（按时间正序）。
+pub async fn load_all_messages(conn: &Connection, session_id: &str) -> Result<Vec<Message>> {
+    let session_id = session_id.to_string();
+    conn.call(move |conn| {
+        let messages = conn
+            .prepare(
+                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender \
+                 FROM messages WHERE session_id = ?1 AND payload_type != 'notice' ORDER BY timestamp",
+            )?
+            .query_map(params![&session_id], |row| {
+                Ok(Message {
+                    id: row.get(0)?,
+                    session_id: row.get(1)?,
+                    client_id: row.get(2)?,
+                    direction: row.get(3)?,
+                    payload_type: row.get(4)?,
+                    payload: row.get(5)?,
+                    size: row.get::<_, usize>(6)?,
+                    timestamp: row.get(7)?,
+                    endpoint: row.get(8)?,
+                    sender: row.get(9)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(messages)
+    })
+    .await
+    .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("load all messages: {}", e))
+}
+
 pub async fn count_messages_by_endpoint(
     conn: &Connection,
     session_id: &str,

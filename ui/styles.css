@@ -1275,6 +1275,17 @@ dialog select {
   max-width: 100%;
 }
 
+.export-format-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.export-format-row button {
+  min-width: 90px;
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;

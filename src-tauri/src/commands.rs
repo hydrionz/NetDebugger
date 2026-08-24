@@ -198,6 +198,122 @@ pub async fn clear_messages(state: State<'_ , AppState>, session_id: String) -> 
         .map_err(|e| e.to_string())
 }
 
+/// 导出会话全部消息历史：弹出系统保存对话框，按 JSON 或文本格式写入。
+/// 返回保存的文件路径；用户取消时返回 None。
+#[tauri::command]
+pub async fn export_messages(
+    state: State<'_ , AppState>,
+    session_id: String,
+    format: String,
+) -> Result<Option<String>, String> {
+    use base64::Engine;
+
+    // 数据库为数据源（包含前端未加载的更早历史）
+    let messages = db::load_all_messages(&state.db, &session_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    if messages.is_empty() {
+        return Err("当前会话没有可导出的消息".to_string());
+    }
+
+    let is_json = format == "json";
+    let (filter_name, exts) = if is_json {
+        ("JSON 文件", vec!["json"])
+    } else {
+        ("文本文件", vec!["txt"])
+    };
+
+    let file = rfd::AsyncFileDialog::new()
+        .set_file_name(if is_json { "messages.json" } else { "messages.txt" })
+        .add_filter(filter_name, &exts)
+        .save_file()
+        .await;
+    let Some(file) = file else { return Ok(None) };
+    let path = file.path().to_path_buf();
+
+    // 序列化放在阻塞线程，避免大历史卡住 async 运行时
+    let fmt = format.clone();
+    let serialized = tauri::async_runtime::spawn_blocking(move || -> Result<Vec<u8>, String> {
+        if fmt == "json" {
+            #[derive(serde::Serialize)]
+            struct ExportMessage<'a> {
+                timestamp: i64,
+                time: String,
+                direction: &'a str,
+                payload_type: &'a str,
+                endpoint: Option<&'a str>,
+                sender: Option<&'a str>,
+                size: usize,
+                text: String,
+                #[serde(skip_serializing_if = "Option::is_none")]
+                payload_base64: Option<String>,
+            }
+            let b64 = base64::engine::general_purpose::STANDARD;
+            let items: Vec<ExportMessage> = messages
+                .iter()
+                .map(|m| {
+                    // 按 payload_type 区分：binary 一律十六进制展示（含合法 UTF-8 的控制字节）；
+                    // text 按文本展示。base64 保留二进制原始字节。
+                    let is_binary = m.payload_type == "binary";
+                    let text = if is_binary {
+                        hex_encode(&m.payload)
+                    } else {
+                        String::from_utf8_lossy(&m.payload).into_owned()
+                    };
+                    ExportMessage {
+                        timestamp: m.timestamp,
+                        time: chrono::DateTime::from_timestamp_millis(m.timestamp)
+                            .map(|d| d.format("%Y-%m-%d %H:%M:%S%.3f").to_string())
+                            .unwrap_or_default(),
+                        direction: &m.direction,
+                        payload_type: &m.payload_type,
+                        endpoint: m.endpoint.as_deref(),
+                        sender: m.sender.as_deref(),
+                        size: m.size,
+                        text,
+                        payload_base64: if is_binary {
+                            Some(b64.encode(&m.payload))
+                        } else {
+                            None
+                        },
+                    }
+                })
+                .collect();
+            serde_json::to_vec_pretty(&items).map_err(|e| e.to_string())
+        } else {
+            let mut out = String::new();
+            for m in &messages {
+                let time = chrono::DateTime::from_timestamp_millis(m.timestamp)
+                    .map(|d| d.format("%Y-%m-%d %H:%M:%S%.3f").to_string())
+                    .unwrap_or_default();
+                let arrow = if m.direction == "in" { "← 收" } else { "→ 发" };
+                let ep = m.endpoint.as_deref().unwrap_or("-");
+                let sender = m.sender.as_deref().unwrap_or("");
+                let sender_part = if sender.is_empty() { String::new() } else { format!(" [{}]", sender) };
+                let body = if m.payload_type == "binary" {
+                    hex_encode(&m.payload)
+                } else {
+                    String::from_utf8_lossy(&m.payload).into_owned()
+                };
+                out.push_str(&format!(
+                    "[{}] {} {} ep={}{} size={}\n{}\n\n",
+                    time, arrow, m.payload_type, ep, sender_part, m.size, body
+                ));
+            }
+            Ok(out.into_bytes())
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    file.write(&serialized).await.map_err(|e| e.to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ")
+}
+
 #[tauri::command]
 pub async fn count_messages_by_endpoint(
     state: State<'_ , AppState>,

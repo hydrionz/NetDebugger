@@ -101,6 +101,13 @@
                 <path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
               </svg>
             </button>
+            <button id="btn-export" class="icon-btn" data-tip="导出消息历史（JSON/文本）" aria-label="导出">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </button>
             <button id="btn-clear" class="icon-btn" data-tip="清空当前会话的消息记录" aria-label="清空">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 6h18"/>
@@ -337,6 +344,19 @@
     <div class="tpl-resize tpl-resize-nw" data-dir="nw"></div>
     <div class="tpl-resize tpl-resize-se" data-dir="se"></div>
     <div class="tpl-resize tpl-resize-sw" data-dir="sw"></div>
+  </dialog>
+
+  <dialog id="dlg-export" class="app-dialog">
+    <div class="app-dialog-body">
+      <div class="app-dialog-message">选择导出格式</div>
+      <div class="export-format-row">
+        <button id="btn-export-text" value="text">文本</button>
+        <button id="btn-export-json" value="json">JSON</button>
+      </div>
+      <div class="dialog-actions">
+        <button id="btn-export-cancel" value="cancel">取消</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="dlg-update" class="app-dialog">
