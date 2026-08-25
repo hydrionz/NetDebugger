@@ -359,29 +359,59 @@
     </div>
   </dialog>
 
-  <dialog id="dlg-autoreply" class="app-dialog" style="min-width:560px; max-width:640px">
+  <dialog id="dlg-autoreply" class="app-dialog" style="min-width:680px; max-width:750px">
     <div class="app-dialog-body">
-      <div style="font-weight:600; margin-bottom:8px">自动回复规则（仅服务端，命中首条自动回复）</div>
-      <div id="autoreply-list" class="endpoint-list"></div>
-      <div class="autoreply-add-row">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+        <span style="font-weight:600">自动回复规则（仅服务端，命中首条自动回复）</span>
+        <button id="btn-autoreply-new" class="primary" style="font-size:12px; padding:4px 10px">新增</button>
+      </div>
+      <div style="max-height:320px; overflow-y:auto; border:1px solid var(--border); border-radius:4px">
+        <table class="autoreply-table" style="width:100%; border-collapse:collapse; font-size:12px">
+          <thead>
+            <tr style="background:var(--bg); text-align:left">
+              <th style="padding:6px 8px; width:50px">启用</th>
+              <th style="padding:6px 8px">匹配类型</th>
+              <th style="padding:6px 8px">匹配内容</th>
+              <th style="padding:6px 8px">回复类型</th>
+              <th style="padding:6px 8px">回复内容</th>
+              <th style="padding:6px 8px; width:70px">延迟ms</th>
+              <th style="padding:6px 8px; width:90px">操作</th>
+            </tr>
+          </thead>
+          <tbody id="autoreply-tbody"></tbody>
+        </table>
+      </div>
+      <div id="autoreply-empty" style="text-align:center; color:var(--text-muted); font-size:12px; padding:12px; display:none">暂无规则，请点击新增</div>
+      <div class="dialog-actions">
+        <button id="btn-autoreply-cancel">取消</button>
+        <button id="btn-autoreply-ok" class="primary">保存</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-autoreply-edit" class="app-dialog" style="min-width:420px">
+    <div class="app-dialog-body">
+      <div id="dlg-autoreply-edit-title" style="font-weight:600; margin-bottom:8px">新增规则</div>
+      <label style="display:block; margin-bottom:8px">匹配类型:
         <select id="autoreply-match-type">
           <option value="contains">包含</option>
           <option value="exact">精确</option>
           <option value="regex">正则</option>
         </select>
-        <input type="text" id="autoreply-pattern" placeholder="匹配内容" />
+      </label>
+      <label style="display:block; margin-bottom:8px">匹配内容: <input type="text" id="autoreply-pattern" placeholder="匹配内容" style="width:100%" /></label>
+      <label style="display:block; margin-bottom:8px">回复类型:
         <select id="autoreply-reply-type">
           <option value="text">文本</option>
           <option value="hex">Hex</option>
           <option value="base64">Base64</option>
         </select>
-        <input type="text" id="autoreply-reply" placeholder="回复内容" />
-        <input type="number" id="autoreply-delay" placeholder="延迟ms" value="0" min="0" style="width:80px" />
-        <button type="button" id="btn-autoreply-add">添加</button>
-      </div>
+      </label>
+      <label style="display:block; margin-bottom:8px">回复内容: <input type="text" id="autoreply-reply" placeholder="回复内容" style="width:100%" /></label>
+      <label style="display:block; margin-bottom:12px">延迟(ms): <input type="number" id="autoreply-delay" value="0" min="0" style="width:100%" /></label>
       <div class="dialog-actions">
-        <button id="btn-autoreply-cancel">取消</button>
-        <button id="btn-autoreply-ok" class="primary">保存</button>
+        <button id="btn-autoreply-edit-cancel">取消</button>
+        <button id="btn-autoreply-edit-ok" class="primary">确定</button>
       </div>
     </div>
   </dialog>

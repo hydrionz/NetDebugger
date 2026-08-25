@@ -72,13 +72,14 @@ const els = {
   endpointList: document.getElementById('endpoint-list'),
   endpointInput: document.getElementById('endpoint-input'),
   btnEndpointAdd: document.getElementById('btn-endpoint-add'),
-  autoReplyList: document.getElementById('autoreply-list'),
+  autoReplyTbody: document.getElementById('autoreply-tbody'),
+  autoReplyEmpty: document.getElementById('autoreply-empty'),
   autoReplyMatchType: document.getElementById('autoreply-match-type'),
   autoReplyPattern: document.getElementById('autoreply-pattern'),
   autoReplyReplyType: document.getElementById('autoreply-reply-type'),
   autoReplyReply: document.getElementById('autoreply-reply'),
   autoReplyDelay: document.getElementById('autoreply-delay'),
-  btnAutoReplyAdd: document.getElementById('btn-autoreply-add'),
+  btnAutoReplyNew: document.getElementById('btn-autoreply-new'),
   headerList: document.getElementById('header-list'),
   headerKeyInput: document.getElementById('header-key-input'),
   headerValueInput: document.getElementById('header-value-input'),
@@ -781,26 +782,60 @@ function addSubprotocolFromInput() {
   renderSubprotocolList();
 }
 
+let editingAutoReplyRuleId = null;
+
 function renderAutoReplyList() {
-  els.autoReplyList.innerHTML = '';
+  const tbody = els.autoReplyTbody;
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  const emptyEl = els.autoReplyEmpty;
+  if (emptyEl) emptyEl.style.display = state.autoReplyDraft.length ? 'none' : 'block';
   for (const r of state.autoReplyDraft) {
-    const row = document.createElement('div');
-    row.className = 'autoreply-item';
-    row.innerHTML = `<label style="display:flex;align-items:center;gap:4px;flex:1;min-width:0">
-      <input type="checkbox" ${r.enabled ? 'checked' : ''} data-ar="enabled" />
-      <span class="ar-type">${escapeHtml(r.match_type)}</span>
-      <span class="ar-pattern" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.pattern)}</span>
-      <span style="color:var(--text-muted)">→</span>
-      <span class="ar-reply" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.reply)}</span>
-      <span style="font-size:10px;color:var(--text-muted)">${r.reply_type}${r.delay_ms ? ` ${r.delay_ms}ms` : ''}</span>
-    </label><button type="button" class="endpoint-remove" data-tip="删除">×</button>`;
-    row.querySelector('[data-ar="enabled"]').addEventListener('change', (e) => { r.enabled = e.target.checked; });
-    row.querySelector('.endpoint-remove').addEventListener('click', () => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--border)';
+    tr.innerHTML = `
+      <td style="padding:6px 8px; text-align:center"><input type="checkbox" ${r.enabled ? 'checked' : ''} data-ar="enabled"></td>
+      <td style="padding:6px 8px">${escapeHtml(r.match_type)}</td>
+      <td style="padding:6px 8px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${escapeHtml(r.pattern)}">${escapeHtml(r.pattern)}</td>
+      <td style="padding:6px 8px">${escapeHtml(r.reply_type)}</td>
+      <td style="padding:6px 8px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${escapeHtml(r.reply)}">${escapeHtml(r.reply)}</td>
+      <td style="padding:6px 8px">${r.delay_ms}</td>
+      <td style="padding:6px 8px; white-space:nowrap">
+        <button type="button" data-ar="edit" style="font-size:11px; padding:2px 6px">编辑</button>
+        <button type="button" data-ar="delete" style="font-size:11px; padding:2px 6px; color:var(--error)">删除</button>
+      </td>
+    `;
+    tr.querySelector('[data-ar="enabled"]').addEventListener('change', (e) => { r.enabled = e.target.checked; });
+    tr.querySelector('[data-ar="edit"]').addEventListener('click', () => openAutoReplyEditDialog(r.id));
+    tr.querySelector('[data-ar="delete"]').addEventListener('click', async () => {
+      if (!await showConfirm(`确定删除该自动回复规则？\n匹配: ${r.pattern}`)) return;
       state.autoReplyDraft = state.autoReplyDraft.filter((x) => x !== r);
       renderAutoReplyList();
     });
-    els.autoReplyList.appendChild(row);
+    tbody.appendChild(tr);
   }
+}
+
+function openAutoReplyEditDialog(ruleId) {
+  editingAutoReplyRuleId = ruleId;
+  const isEdit = !!ruleId;
+  document.getElementById('dlg-autoreply-edit-title').textContent = isEdit ? '编辑规则' : '新增规则';
+  if (isEdit) {
+    const r = state.autoReplyDraft.find((x) => x.id === ruleId);
+    if (!r) return;
+    els.autoReplyMatchType.value = r.match_type;
+    els.autoReplyPattern.value = r.pattern;
+    els.autoReplyReplyType.value = r.reply_type;
+    els.autoReplyReply.value = r.reply;
+    els.autoReplyDelay.value = String(r.delay_ms);
+  } else {
+    els.autoReplyMatchType.value = 'contains';
+    els.autoReplyPattern.value = '';
+    els.autoReplyReplyType.value = 'text';
+    els.autoReplyReply.value = '';
+    els.autoReplyDelay.value = '0';
+  }
+  document.getElementById('dlg-autoreply-edit').showModal();
 }
 
 function addAutoReplyFromInput() {
@@ -818,10 +853,20 @@ function addAutoReplyFromInput() {
   } else if (reply_type === 'base64') {
     try { atob(reply.trim()); } catch { showError('Base64 回复错误'); return; }
   }
-  state.autoReplyDraft.push({ id: crypto.randomUUID(), enabled: true, match_type, pattern, reply, reply_type, delay_ms });
-  els.autoReplyPattern.value = '';
-  els.autoReplyReply.value = '';
-  els.autoReplyDelay.value = '0';
+  if (editingAutoReplyRuleId) {
+    const r = state.autoReplyDraft.find((x) => x.id === editingAutoReplyRuleId);
+    if (r) {
+      r.match_type = match_type;
+      r.pattern = pattern;
+      r.reply = reply;
+      r.reply_type = reply_type;
+      r.delay_ms = delay_ms;
+    }
+    editingAutoReplyRuleId = null;
+  } else {
+    state.autoReplyDraft.push({ id: crypto.randomUUID(), enabled: true, match_type, pattern, reply, reply_type, delay_ms });
+  }
+  document.getElementById('dlg-autoreply-edit').close();
   renderAutoReplyList();
 }
 
@@ -838,7 +883,7 @@ function openAutoReplyDialog(sessionId) {
 async function saveAutoReplies() {
   if (!editingAutoReplySessionId) return;
   try {
-    await invoke('update_auto_replies', { id: editingAutoReplySessionId, auto_replies: state.autoReplyDraft.length ? state.autoReplyDraft : null });
+    await invoke('update_auto_replies', { id: editingAutoReplySessionId, autoReplies: state.autoReplyDraft.length ? state.autoReplyDraft : null });
     await loadProjects();
     document.getElementById('dlg-autoreply').close();
   } catch (e) {
@@ -2017,7 +2062,9 @@ els.endpointInput.addEventListener('keydown', (ev) => {
     addEndpointFromInput();
   }
 });
-els.btnAutoReplyAdd.addEventListener('click', addAutoReplyFromInput);
+els.btnAutoReplyNew?.addEventListener('click', () => openAutoReplyEditDialog(null));
+document.getElementById('btn-autoreply-edit-ok')?.addEventListener('click', (e) => { e.preventDefault(); addAutoReplyFromInput(); });
+document.getElementById('btn-autoreply-edit-cancel')?.addEventListener('click', (e) => { e.preventDefault(); editingAutoReplyRuleId = null; document.getElementById('dlg-autoreply-edit').close(); });
 document.getElementById('btn-autoreply-ok')?.addEventListener('click', (e) => { e.preventDefault(); saveAutoReplies(); });
 document.getElementById('btn-autoreply-cancel')?.addEventListener('click', (e) => { e.preventDefault(); document.getElementById('dlg-autoreply').close(); });
 

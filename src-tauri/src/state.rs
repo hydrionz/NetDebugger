@@ -13,6 +13,7 @@ pub struct WsConfig {
     pub subprotocols: Option<Vec<String>>,
     pub auto_reconnect: Option<i64>,
     pub heartbeat_interval: Option<i64>,
+    #[allow(dead_code)]
     pub auto_replies: Option<Vec<crate::db::AutoReplyRule>>,
 }
 
