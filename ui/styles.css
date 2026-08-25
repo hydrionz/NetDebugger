@@ -1250,6 +1250,25 @@ body.resizing-h {
   border-color: var(--accent);
 }
 
+.btn-check-update {
+  font-size: 12px;
+  padding: 4px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  width: auto;
+}
+
+.btn-check-spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+.btn-check-update.is-checking {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
 /* JSON 树形视图 */
 .j-tree {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;

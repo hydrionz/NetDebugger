@@ -2574,6 +2574,15 @@ function setUpdateIcon(spinning) {
   svg.innerHTML = spinning ? ICON_SPINNING : ICON_UPDATE;
 }
 
+function setAboutUpdateChecking(checking) {
+  const btn = document.getElementById('btn-check-update');
+  if (!btn) return;
+  btn.classList.toggle('is-checking', checking);
+  btn.disabled = checking;
+  const spinner = btn.querySelector('.btn-check-spinner');
+  if (spinner) spinner.classList.toggle('hidden', !checking);
+}
+
 // ─── 自动更新 ───
 let hasUpdate = false;
 
@@ -2616,7 +2625,7 @@ function showUpdateDialog(currentVersion, newVersion) {
 }
 
 async function checkForUpdates(silent = false) {
-  if (!silent) setUpdateIcon(true);
+  if (!silent) { setUpdateIcon(true); setAboutUpdateChecking(true); }
 
   let currentVersion = '';
   try {
@@ -2626,7 +2635,7 @@ async function checkForUpdates(silent = false) {
   try {
     const { check } = window.__TAURI__.updater;
     const update = await check();
-    if (!silent) setUpdateIcon(false);
+    if (!silent) { setUpdateIcon(false); setAboutUpdateChecking(false); }
     if (update) {
       showUpdateBadge(true);
       if (!silent) {
@@ -2640,7 +2649,7 @@ async function checkForUpdates(silent = false) {
       if (!silent) await showUpdateDialog(currentVersion, null);
     }
   } catch (e) {
-    if (!silent) setUpdateIcon(false);
+    if (!silent) { setUpdateIcon(false); setAboutUpdateChecking(false); }
     if (!silent) showError('检查更新失败：' + e);
     console.error('checkForUpdates failed', e);
   }
