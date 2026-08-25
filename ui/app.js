@@ -883,22 +883,7 @@ async function startSession(id) {
 async function stopSession(id) {
   const s = findSession(id);
   if (!s) return;
-  const typeLabel = s.protocol === 'ws' ? 'WS' : s.protocol.toUpperCase();
-  const roleLabel = s.role === 'server' ? 'S' : 'C';
-  const roleClass = s.role === 'server' ? 'role-server' : 'role-client';
-  const roleTitle = s.role === 'server' ? '服务端' : '客户端';
-  const displayName = s.name || (s.role === 'server'
-    ? s.bind_addr || ':?'
-    : s.target_url || '?');
-  const html = `
-    <div>确定停止该连接吗？</div>
-    <div class="confirm-session">
-      <span class="session-type ${roleClass}">${escapeHtml(typeLabel)}</span>
-      <span class="role-badge ${roleClass}" data-tip="${roleTitle}">${escapeHtml(roleLabel)}</span>
-      <span>${escapeHtml(displayName)}</span>
-    </div>
-  `;
-  if (!await showConfirm('确定停止该连接吗？', html)) return;
+  if (!await showStopConfirm(s)) return;
   try {
     await invoke('stop_session', { id });
     await loadProjects();
@@ -2363,6 +2348,48 @@ function showConfirm(message, html) {
     ok.addEventListener('click', onOk);
     cancel.addEventListener('click', onCancel);
     dlg.addEventListener('keydown', onKey);
+    dlg.showModal();
+  });
+}
+
+function showStopConfirm(session) {
+  const dlg = document.getElementById('dlg-stop-session');
+  const typeEl = document.getElementById('dlg-stop-type');
+  const roleEl = document.getElementById('dlg-stop-role');
+  const nameEl = document.getElementById('dlg-stop-name');
+  const typeLabel = session.protocol === 'ws' ? 'WS' : session.protocol.toUpperCase();
+  const roleLabel = session.role === 'server' ? 'S' : 'C';
+  const roleClass = session.role === 'server' ? 'role-server' : 'role-client';
+  const roleTitle = session.role === 'server' ? '服务端' : '客户端';
+  const displayName = session.name || (session.role === 'server' ? session.bind_addr || ':?' : session.target_url || '?');
+  typeEl.textContent = typeLabel;
+  typeEl.className = 'session-type ' + roleClass;
+  roleEl.textContent = roleLabel;
+  roleEl.className = 'role-badge ' + roleClass;
+  roleEl.dataset.tip = roleTitle;
+  nameEl.textContent = displayName;
+  return new Promise((resolve) => {
+    const ok = document.getElementById('btn-stop-ok');
+    const cancel = document.getElementById('btn-stop-cancel');
+    const done = (val) => {
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      dlg.removeEventListener('keydown', onKey);
+      dlg.removeEventListener('click', onBackdrop);
+      dlg.close();
+      resolve(val);
+    };
+    const onOk = () => done(true);
+    const onCancel = () => done(false);
+    const onKey = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); done(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); done(false); }
+    };
+    const onBackdrop = (e) => { if (e.target === dlg) done(false); };
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    dlg.addEventListener('keydown', onKey);
+    dlg.addEventListener('click', onBackdrop);
     dlg.showModal();
   });
 }

@@ -1824,6 +1824,31 @@ dialog select {
   margin-left: 0;
 }
 
+.dlg-stop-title {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.dlg-stop-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.dlg-stop-info .session-type {
+  min-width: 24px;
+  text-align: center;
+}
+
+.dlg-stop-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 #dlg-prompt-input {
   font-size: 13px;
   padding: 6px 10px;
