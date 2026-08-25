@@ -20,6 +20,7 @@ pub struct CreateSessionRequest {
     subprotocols: Option<Vec<String>>,
     auto_reconnect: Option<i64>,
     heartbeat_interval: Option<i64>,
+    auto_replies: Option<Vec<db::AutoReplyRule>>,
 }
 
 #[tauri::command]
@@ -58,6 +59,7 @@ pub async fn create_session(
     let endpoints = normalize_endpoints(req.endpoints)?;
     let headers = normalize_headers(req.headers)?;
     let subprotocols = normalize_subprotocols(req.subprotocols)?;
+    let auto_replies = normalize_auto_replies(req.auto_replies)?;
     db::create_session(
         &state.db,
         req.project_id.as_deref(),
@@ -71,6 +73,7 @@ pub async fn create_session(
         subprotocols,
         req.auto_reconnect,
         req.heartbeat_interval,
+        auto_replies,
     )
     .await
     .map_err(|e| e.to_string())
@@ -88,6 +91,7 @@ pub struct UpdateSessionRequest {
     subprotocols: Option<Vec<String>>,
     auto_reconnect: Option<i64>,
     heartbeat_interval: Option<i64>,
+    auto_replies: Option<Vec<db::AutoReplyRule>>,
 }
 
 /// 校验并规范化 endpoint 路径列表：trim、跳过空串、必须 / 开头、无空白与 ?#、去重保序；全空 → None。
@@ -138,6 +142,33 @@ fn normalize_subprotocols(protos: Option<Vec<String>>) -> Result<Option<Vec<Stri
     Ok(if out.is_empty() { None } else { Some(out) })
 }
 
+/// 校验并规范化自动回复规则：服务端专用，校验正则与回复编码；空/全禁用的去重处理在前端，服务端只做强校验
+fn normalize_auto_replies(rules: Option<Vec<db::AutoReplyRule>>) -> Result<Option<Vec<db::AutoReplyRule>>, String> {
+    let Some(list) = rules else { return Ok(None) };
+    if list.is_empty() { return Ok(None) };
+    for r in &list {
+        if r.pattern.trim().is_empty() { return Err("自动回复匹配内容不能为空".to_string()); }
+        if !["contains", "exact", "regex"].contains(&r.match_type.as_str()) {
+            return Err(format!("未知的匹配类型: {}", r.match_type));
+        }
+        if !["text", "hex", "base64"].contains(&r.reply_type.as_str()) {
+            return Err(format!("未知的回复类型: {}", r.reply_type));
+        }
+        if r.match_type == "regex" {
+            regex::Regex::new(&r.pattern).map_err(|e| format!("正则错误 '{}': {}", r.pattern, e))?;
+        }
+        if r.reply_type == "hex" {
+            let c = r.reply.replace(char::is_whitespace, "").replace("0x", "").replace("0X", "");
+            if c.len() % 2 != 0 { return Err(format!("Hex 回复长度必须为偶数: {}", r.reply)); }
+            if !c.chars().all(|ch| ch.is_ascii_hexdigit()) { return Err(format!("Hex 回复含非法字符: {}", r.reply)); }
+        } else if r.reply_type == "base64" {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD.decode(r.reply.trim()).map_err(|e| format!("Base64 回复错误: {}", e))?;
+        }
+    }
+    Ok(Some(list))
+}
+
 #[tauri::command]
 pub async fn update_session(
     state: State<'_, AppState>,
@@ -159,6 +190,7 @@ pub async fn update_session(
     let endpoints = normalize_endpoints(req.endpoints)?;
     let headers = normalize_headers(req.headers)?;
     let subprotocols = normalize_subprotocols(req.subprotocols)?;
+    let auto_replies = normalize_auto_replies(req.auto_replies)?;
     db::update_session(
         &state.db,
         &req.id,
@@ -171,9 +203,30 @@ pub async fn update_session(
         subprotocols,
         req.auto_reconnect,
         req.heartbeat_interval,
+        auto_replies,
     )
     .await
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn update_auto_replies(
+    state: State<'_ , AppState>,
+    id: String,
+    auto_replies: Option<Vec<db::AutoReplyRule>>,
+) -> Result<(), String> {
+    let sessions = db::list_projects_with_sessions(&state.db).await.map_err(|e| e.to_string())?;
+    let session = sessions.into_iter().flat_map(|p| p.sessions).find(|s| s.id == id).ok_or_else(|| "session not found".to_string())?;
+    if session.role != "server" {
+        return Err("仅服务端支持自动回复".to_string());
+    }
+    let auto_replies = normalize_auto_replies(auto_replies)?;
+    db::update_auto_replies(&state.db, &id, auto_replies.clone()).await.map_err(|e| e.to_string())?;
+    // 运行时动态生效：同步更新内存中的规则
+    if let Some(h) = state.sessions.read().await.get(&id).cloned() {
+        *h.auto_replies.lock().await = auto_replies;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -375,6 +428,7 @@ pub async fn start_session(
         subprotocols: session.subprotocols.clone(),
         auto_reconnect: session.auto_reconnect,
         heartbeat_interval: session.heartbeat_interval,
+        auto_replies: session.auto_replies.clone(),
     };
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
@@ -387,6 +441,7 @@ pub async fn start_session(
         last_ping_at: Arc::new(tokio::sync::Mutex::new(None)),
         last_pong_at: Arc::new(tokio::sync::Mutex::new(None)),
         manual_ping_pending: Arc::new(tokio::sync::Mutex::new(false)),
+        auto_replies: Arc::new(tokio::sync::Mutex::new(session.auto_replies.clone())),
     });
 
     {

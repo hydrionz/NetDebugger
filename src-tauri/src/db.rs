@@ -15,6 +15,22 @@ pub struct Project {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoReplyRule {
+    pub id: String,
+    pub enabled: bool,
+    #[serde(rename = "match_type")]
+    pub match_type: String, // "contains" | "exact" | "regex"
+    pub pattern: String,
+    pub reply: String,
+    #[serde(default = "default_reply_type")]
+    pub reply_type: String, // "text" | "hex" | "base64"
+    #[serde(default)]
+    pub delay_ms: u64,
+}
+
+fn default_reply_type() -> String { "text".to_string() }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
     pub id: String,
     pub project_id: Option<String>,
@@ -33,6 +49,7 @@ pub struct Session {
     pub subprotocols: Option<Vec<String>>,
     pub auto_reconnect: Option<i64>,
     pub heartbeat_interval: Option<i64>,
+    pub auto_replies: Option<Vec<AutoReplyRule>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,6 +95,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/008_ws_headers_subprotocols.sql"),
     include_str!("../migrations/009_auto_reconnect.sql"),
     include_str!("../migrations/010_heartbeat.sql"),
+    include_str!("../migrations/011_auto_replies.sql"),
 ];
 
 pub async fn open_db(path: &str) -> Result<Connection> {
@@ -231,7 +249,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
         let mut result = Vec::with_capacity(projects.len());
         for project in projects {
             let mut stmt = conn.prepare(
-                "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints, headers, subprotocols, auto_reconnect, heartbeat_interval \
+                "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints, headers, subprotocols, auto_reconnect, heartbeat_interval, auto_replies \
                  FROM sessions WHERE project_id = ?1 ORDER BY created_at",
             )?;
             let sessions = stmt
@@ -240,6 +258,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
                     let endpoints_raw: Option<String> = row.get(12)?;
                     let headers_raw: Option<String> = row.get(13)?;
                     let subprotocols_raw: Option<String> = row.get(14)?;
+                    let auto_replies_raw: Option<String> = row.get(17)?;
                     Ok(Session {
                         id: row.get(0)?,
                         project_id: row.get(1)?,
@@ -258,6 +277,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
                         subprotocols: subprotocols_raw.and_then(|s| serde_json::from_str(&s).ok()),
                         auto_reconnect: row.get(15)?,
                         heartbeat_interval: row.get(16)?,
+                        auto_replies: auto_replies_raw.and_then(|s| serde_json::from_str(&s).ok()),
                     })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -266,7 +286,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
 
         // Ungrouped sessions
         let mut stmt = conn.prepare(
-            "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints, headers, subprotocols, auto_reconnect, heartbeat_interval \
+            "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints, headers, subprotocols, auto_reconnect, heartbeat_interval, auto_replies \
              FROM sessions WHERE project_id IS NULL ORDER BY created_at",
         )?;
         let ungrouped = stmt
@@ -274,6 +294,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
                 let endpoints_raw: Option<String> = row.get(12)?;
                 let headers_raw: Option<String> = row.get(13)?;
                 let subprotocols_raw: Option<String> = row.get(14)?;
+                let auto_replies_raw: Option<String> = row.get(17)?;
                 Ok(Session {
                     id: row.get(0)?,
                     project_id: row.get(1)?,
@@ -292,6 +313,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
                     subprotocols: subprotocols_raw.and_then(|s| serde_json::from_str(&s).ok()),
                     auto_reconnect: row.get(15)?,
                     heartbeat_interval: row.get(16)?,
+                    auto_replies: auto_replies_raw.and_then(|s| serde_json::from_str(&s).ok()),
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -326,6 +348,7 @@ pub async fn create_session(
     subprotocols: Option<Vec<String>>,
     auto_reconnect: Option<i64>,
     heartbeat_interval: Option<i64>,
+    auto_replies: Option<Vec<AutoReplyRule>>,
 ) -> Result<Session> {
     let now = chrono::Utc::now().timestamp_millis();
     let id = Uuid::new_v4().to_string();
@@ -337,11 +360,12 @@ pub async fn create_session(
     let endpoints_json = endpoints.as_ref().map(|v| serde_json::to_string(v).expect("endpoints json"));
     let headers_json = headers.as_ref().map(|v| serde_json::to_string(v).expect("headers json"));
     let subprotocols_json = subprotocols.as_ref().map(|v| serde_json::to_string(v).expect("subprotocols json"));
+    let auto_replies_json = auto_replies.as_ref().map(|v| serde_json::to_string(v).expect("auto_replies json"));
 
     conn.call(move |conn| {
         conn.execute(
-            "INSERT INTO sessions (id, project_id, name, protocol, role, status, bind_addr, target_url, endpoints, headers, subprotocols, auto_reconnect, heartbeat_interval, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            "INSERT INTO sessions (id, project_id, name, protocol, role, status, bind_addr, target_url, endpoints, headers, subprotocols, auto_reconnect, heartbeat_interval, auto_replies, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 &id,
                 &project_id,
@@ -356,6 +380,7 @@ pub async fn create_session(
                 &subprotocols_json,
                 &auto_reconnect,
                 &heartbeat_interval,
+                &auto_replies_json,
                 &now.to_string(),
                 &now.to_string(),
             ],
@@ -378,6 +403,7 @@ pub async fn create_session(
             subprotocols,
             auto_reconnect,
             heartbeat_interval,
+            auto_replies,
         })
     })
     .await
@@ -396,6 +422,7 @@ pub async fn update_session(
     subprotocols: Option<Vec<String>>,
     auto_reconnect: Option<i64>,
     heartbeat_interval: Option<i64>,
+    auto_replies: Option<Vec<AutoReplyRule>>,
 ) -> Result<()> {
     let id = id.to_string();
     let project_id = project_id.map(|s| s.to_string());
@@ -404,10 +431,11 @@ pub async fn update_session(
     let endpoints_json = endpoints.as_ref().map(|v| serde_json::to_string(v).expect("endpoints json"));
     let headers_json = headers.as_ref().map(|v| serde_json::to_string(v).expect("headers json"));
     let subprotocols_json = subprotocols.as_ref().map(|v| serde_json::to_string(v).expect("subprotocols json"));
+    let auto_replies_json = auto_replies.as_ref().map(|v| serde_json::to_string(v).expect("auto_replies json"));
 
     conn.call(move |conn| {
         conn.execute(
-            "UPDATE sessions SET project_id = ?2, name = ?3, bind_addr = ?4, target_url = ?5, endpoints = ?6, headers = ?7, subprotocols = ?8, auto_reconnect = ?9, heartbeat_interval = ?10, updated_at = ?11 WHERE id = ?1",
+            "UPDATE sessions SET project_id = ?2, name = ?3, bind_addr = ?4, target_url = ?5, endpoints = ?6, headers = ?7, subprotocols = ?8, auto_reconnect = ?9, heartbeat_interval = ?10, auto_replies = ?11, updated_at = ?12 WHERE id = ?1",
             params![
                 &id,
                 &project_id,
@@ -419,6 +447,7 @@ pub async fn update_session(
                 &subprotocols_json,
                 &auto_reconnect,
                 &heartbeat_interval,
+                &auto_replies_json,
                 &now.to_string(),
             ],
         )?;
@@ -456,6 +485,21 @@ pub async fn update_session_status(
     })
     .await
     .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("update session status: {}", e))
+}
+
+pub async fn update_auto_replies(conn: &Connection, id: &str, auto_replies: Option<Vec<AutoReplyRule>>) -> Result<()> {
+    let id = id.to_string();
+    let now = chrono::Utc::now().timestamp_millis();
+    let auto_replies_json = auto_replies.as_ref().map(|v| serde_json::to_string(v).expect("auto_replies json"));
+    conn.call(move |conn| {
+        conn.execute(
+            "UPDATE sessions SET auto_replies = ?2, updated_at = ?3 WHERE id = ?1",
+            params![&id, &auto_replies_json, &now.to_string()],
+        )?;
+        Ok(())
+    })
+    .await
+    .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("update auto_replies: {}", e))
 }
 
 pub async fn delete_session(conn: &Connection, id: &str) -> Result<()> {

@@ -13,6 +13,7 @@ pub struct WsConfig {
     pub subprotocols: Option<Vec<String>>,
     pub auto_reconnect: Option<i64>,
     pub heartbeat_interval: Option<i64>,
+    pub auto_replies: Option<Vec<crate::db::AutoReplyRule>>,
 }
 
 #[derive(Debug, Clone)]
@@ -85,6 +86,8 @@ pub struct SessionHandle {
     pub last_pong_at: Arc<Mutex<Option<i64>>>,
     /// 最近一次 Ping 是否为手动触发（用于时间线展示往返延迟）
     pub manual_ping_pending: Arc<Mutex<bool>>,
+    /// 自动回复规则（运行时可动态更新，无需重启）
+    pub auto_replies: Arc<Mutex<Option<Vec<crate::db::AutoReplyRule>>>>,
 }
 
 pub struct AppState {

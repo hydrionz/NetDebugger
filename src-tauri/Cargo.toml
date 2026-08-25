@@ -33,3 +33,4 @@ serde_bytes = "0.11"
 libsqlite3-sys = { version = "0.35", features = ["bundled"] }
 rfd = "0.15"
 base64 = "0.22"
+regex = "1"

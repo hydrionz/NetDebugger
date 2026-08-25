@@ -246,9 +246,55 @@ async fn run_client_socket_loop<S>(
                 match msg {
                     Some(Ok(WsMessage::Text(text))) => {
                         persist_in_message(&db, &session_id, Some(&client_id), "text", text.as_bytes().to_vec(), Some(&endpoint), Some(remote_addr_ref), &handle).await;
+                        // 自动回复：动态读取最新规则，命中首条即回复
+                        let compiled: Vec<(crate::db::AutoReplyRule, Option<regex::Regex>)> = {
+                            let guard = handle.auto_replies.lock().await;
+                            guard.clone().unwrap_or_default().into_iter().filter(|r| r.enabled).map(|r| {
+                                let re = if r.match_type == "regex" { regex::Regex::new(&r.pattern).ok() } else { None };
+                                (r, re)
+                            }).collect()
+                        };
+                        if !compiled.is_empty() {
+                            if let Some((reply_bytes, is_text, delay_ms)) = match_auto_reply(&text, &compiled) {
+                                if delay_ms > 0 { tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await; }
+                                let (ptype, payload) = if is_text { ("text", reply_bytes.clone()) } else { ("binary", reply_bytes.clone()) };
+                                persist_out_message(&db, &session_id, Some(&client_id), ptype, reply_bytes.clone(), Some(&endpoint), &handle).await;
+                                let send_res = if is_text {
+                                    write.send(WsMessage::Text(String::from_utf8_lossy(&payload).into_owned().into())).await
+                                } else {
+                                    write.send(WsMessage::Binary(payload.into())).await
+                                };
+                                if send_res.is_ok() {
+                                    persist_notice(&db, &handle, &session_id, format!("↻ 自动回复【{}】", remote_addr_ref)).await;
+                                }
+                            }
+                        }
                     }
                     Some(Ok(WsMessage::Binary(bin))) => {
                         persist_in_message(&db, &session_id, Some(&client_id), "binary", bin.to_vec(), Some(&endpoint), Some(remote_addr_ref), &handle).await;
+                        let compiled: Vec<(crate::db::AutoReplyRule, Option<regex::Regex>)> = {
+                            let guard = handle.auto_replies.lock().await;
+                            guard.clone().unwrap_or_default().into_iter().filter(|r| r.enabled).map(|r| {
+                                let re = if r.match_type == "regex" { regex::Regex::new(&r.pattern).ok() } else { None };
+                                (r, re)
+                            }).collect()
+                        };
+                        if !compiled.is_empty() {
+                            let txt = String::from_utf8_lossy(&bin).into_owned();
+                            if let Some((reply_bytes, is_text, delay_ms)) = match_auto_reply(&txt, &compiled) {
+                                if delay_ms > 0 { tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await; }
+                                let (ptype, payload) = if is_text { ("text", reply_bytes.clone()) } else { ("binary", reply_bytes.clone()) };
+                                persist_out_message(&db, &session_id, Some(&client_id), ptype, reply_bytes.clone(), Some(&endpoint), &handle).await;
+                                let send_res = if is_text {
+                                    write.send(WsMessage::Text(String::from_utf8_lossy(&payload).into_owned().into())).await
+                                } else {
+                                    write.send(WsMessage::Binary(payload.into())).await
+                                };
+                                if send_res.is_ok() {
+                                    persist_notice(&db, &handle, &session_id, format!("↻ 自动回复【{}】", remote_addr_ref)).await;
+                                }
+                            }
+                        }
                     }
                     Some(Ok(WsMessage::Pong(_))) => {
                         // 客户端响应了服务端的 Ping：记录时间；手动 Ping 时在时间线展示往返延迟
@@ -821,6 +867,32 @@ fn friendly_connect_error(e: &tokio_tungstenite::tungstenite::Error) -> String {
         return "服务端拒绝了该路径（endpoint 未配置或不存在）".to_string();
     }
     msg
+}
+
+fn match_auto_reply(
+    text: &str,
+    rules: &[(crate::db::AutoReplyRule, Option<regex::Regex>)],
+) -> Option<(Vec<u8>, bool, u64)> {
+    for (rule, re) in rules {
+        let hit = match rule.match_type.as_str() {
+            "exact" => text.trim() == rule.pattern.trim(),
+            "regex" => re.as_ref().map_or(false, |r| r.is_match(text)),
+            _ => text.contains(&rule.pattern), // contains (default)
+        };
+        if !hit { continue; }
+        let is_text = rule.reply_type == "text";
+        let bytes = if is_text {
+            rule.reply.clone().into_bytes()
+        } else if rule.reply_type == "hex" {
+            let c = rule.reply.replace(char::is_whitespace, "").replace("0x", "").replace("0X", "");
+            (0..c.len()).step_by(2).map(|i| u8::from_str_radix(&c[i..i+2], 16).unwrap_or(0)).collect()
+        } else {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD.decode(rule.reply.trim()).unwrap_or_default()
+        };
+        return Some((bytes, is_text, rule.delay_ms));
+    }
+    None
 }
 
 #[cfg(test)]

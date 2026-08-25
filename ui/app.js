@@ -23,6 +23,7 @@ const state = {
   endpointDraft: [],
   headerDraft: [],
   subprotocolDraft: [],
+  autoReplyDraft: [],
   templates: [],
   activeTemplate: null,
 };
@@ -71,6 +72,13 @@ const els = {
   endpointList: document.getElementById('endpoint-list'),
   endpointInput: document.getElementById('endpoint-input'),
   btnEndpointAdd: document.getElementById('btn-endpoint-add'),
+  autoReplyList: document.getElementById('autoreply-list'),
+  autoReplyMatchType: document.getElementById('autoreply-match-type'),
+  autoReplyPattern: document.getElementById('autoreply-pattern'),
+  autoReplyReplyType: document.getElementById('autoreply-reply-type'),
+  autoReplyReply: document.getElementById('autoreply-reply'),
+  autoReplyDelay: document.getElementById('autoreply-delay'),
+  btnAutoReplyAdd: document.getElementById('btn-autoreply-add'),
   headerList: document.getElementById('header-list'),
   headerKeyInput: document.getElementById('header-key-input'),
   headerValueInput: document.getElementById('header-value-input'),
@@ -347,6 +355,7 @@ function ensureContextMenu() {
   contextMenuEl.className = 'context-menu hidden';
   contextMenuEl.innerHTML = `
     <div class="context-menu-item" data-ctx="edit"><span class="ctx-icon">✎</span><span class="ctx-label">编辑</span></div>
+    <div class="context-menu-item" data-ctx="autoreply"><span class="ctx-icon">↻</span><span class="ctx-label">自动回复</span></div>
     <div class="context-menu-item" data-ctx="delete"><span class="ctx-icon">×</span><span class="ctx-label">删除</span></div>
   `;
   document.body.appendChild(contextMenuEl);
@@ -369,6 +378,8 @@ function ensureContextMenu() {
     if (item.dataset.ctx === 'edit') {
       const s = findSession(id);
       if (s) openEditSessionDialog(s);
+    } else if (item.dataset.ctx === 'autoreply') {
+      openAutoReplyDialog(id);
     } else if (item.dataset.ctx === 'delete') {
       deleteSession(id);
     }
@@ -397,9 +408,14 @@ function showSessionContextMenu(x, y, sessionId, canEdit, isRunning) {
   ensureContextMenu();
   contextMenuEl.dataset.kind = 'session';
   contextMenuEl.dataset.targetId = sessionId;
-  // 运行中的连接不可编辑、不可删除
+  // 运行中的连接不可编辑、不可删除/改自动回复
   contextMenuEl.querySelector('[data-ctx="edit"]').classList.toggle('disabled', !canEdit);
   contextMenuEl.querySelector('[data-ctx="delete"]').classList.toggle('disabled', isRunning);
+  const s = findSession(sessionId);
+  const isServer = s && s.role === 'server';
+  const arItem = contextMenuEl.querySelector('[data-ctx="autoreply"]');
+  arItem.classList.toggle('hidden', !isServer);
+  arItem.classList.remove('disabled');
   positionContextMenu(x, y);
 }
 
@@ -409,6 +425,7 @@ function showProjectContextMenu(x, y, projectId) {
   contextMenuEl.dataset.targetId = projectId;
   contextMenuEl.querySelector('[data-ctx="edit"]').classList.remove('disabled');
   contextMenuEl.querySelector('[data-ctx="delete"]').classList.remove('disabled');
+  contextMenuEl.querySelector('[data-ctx="autoreply"]').classList.add('hidden');
   positionContextMenu(x, y);
 }
 
@@ -764,6 +781,71 @@ function addSubprotocolFromInput() {
   renderSubprotocolList();
 }
 
+function renderAutoReplyList() {
+  els.autoReplyList.innerHTML = '';
+  for (const r of state.autoReplyDraft) {
+    const row = document.createElement('div');
+    row.className = 'autoreply-item';
+    row.innerHTML = `<label style="display:flex;align-items:center;gap:4px;flex:1;min-width:0">
+      <input type="checkbox" ${r.enabled ? 'checked' : ''} data-ar="enabled" />
+      <span class="ar-type">${escapeHtml(r.match_type)}</span>
+      <span class="ar-pattern" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.pattern)}</span>
+      <span style="color:var(--text-muted)">→</span>
+      <span class="ar-reply" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.reply)}</span>
+      <span style="font-size:10px;color:var(--text-muted)">${r.reply_type}${r.delay_ms ? ` ${r.delay_ms}ms` : ''}</span>
+    </label><button type="button" class="endpoint-remove" data-tip="删除">×</button>`;
+    row.querySelector('[data-ar="enabled"]').addEventListener('change', (e) => { r.enabled = e.target.checked; });
+    row.querySelector('.endpoint-remove').addEventListener('click', () => {
+      state.autoReplyDraft = state.autoReplyDraft.filter((x) => x !== r);
+      renderAutoReplyList();
+    });
+    els.autoReplyList.appendChild(row);
+  }
+}
+
+function addAutoReplyFromInput() {
+  const pattern = els.autoReplyPattern.value.trim();
+  const reply = els.autoReplyReply.value.trim();
+  if (!pattern) { showError('匹配内容不能为空'); return; }
+  if (!reply) { showError('回复内容不能为空'); return; }
+  const match_type = els.autoReplyMatchType.value;
+  const reply_type = els.autoReplyReplyType.value;
+  const delay_ms = Math.max(0, parseInt(els.autoReplyDelay.value.trim() || '0', 10) || 0);
+  if (match_type === 'regex') { try { new RegExp(pattern); } catch (e) { showError('正则错误: ' + e.message); return; } }
+  if (reply_type === 'hex') {
+    const c = reply.replace(/\s+/g, '').replace(/0x/gi, '');
+    if (c.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(c)) { showError('Hex 回复含非法字符或长度为奇数'); return; }
+  } else if (reply_type === 'base64') {
+    try { atob(reply.trim()); } catch { showError('Base64 回复错误'); return; }
+  }
+  state.autoReplyDraft.push({ id: crypto.randomUUID(), enabled: true, match_type, pattern, reply, reply_type, delay_ms });
+  els.autoReplyPattern.value = '';
+  els.autoReplyReply.value = '';
+  els.autoReplyDelay.value = '0';
+  renderAutoReplyList();
+}
+
+let editingAutoReplySessionId = null;
+function openAutoReplyDialog(sessionId) {
+  const s = findSession(sessionId);
+  if (!s) return;
+  editingAutoReplySessionId = sessionId;
+  state.autoReplyDraft = (s.auto_replies || []).map((r) => ({ ...r }));
+  renderAutoReplyList();
+  document.getElementById('dlg-autoreply').showModal();
+}
+
+async function saveAutoReplies() {
+  if (!editingAutoReplySessionId) return;
+  try {
+    await invoke('update_auto_replies', { id: editingAutoReplySessionId, auto_replies: state.autoReplyDraft.length ? state.autoReplyDraft : null });
+    await loadProjects();
+    document.getElementById('dlg-autoreply').close();
+  } catch (e) {
+    showError('保存自动回复失败: ' + e);
+  }
+}
+
 async function saveProject() {
   const name = els.projectName.value.trim();
   if (!name) return;
@@ -834,6 +916,12 @@ async function saveSession() {
     subprotocols: isServer || !state.subprotocolDraft.length ? null : state.subprotocolDraft.slice(),
     auto_reconnect: autoReconnect,
     heartbeat_interval: heartbeatInterval,
+    // 自动回复由独立弹框维护，此处不覆盖：新建为 null，编辑时保留原值
+    auto_replies: (() => {
+      if (!isServer) return null;
+      if (editId) { const cur = findSession(editId); return cur?.auto_replies ?? null; }
+      return null;
+    })(),
   };
   try {
     if (editId) {
@@ -1929,6 +2017,9 @@ els.endpointInput.addEventListener('keydown', (ev) => {
     addEndpointFromInput();
   }
 });
+els.btnAutoReplyAdd.addEventListener('click', addAutoReplyFromInput);
+document.getElementById('btn-autoreply-ok')?.addEventListener('click', (e) => { e.preventDefault(); saveAutoReplies(); });
+document.getElementById('btn-autoreply-cancel')?.addEventListener('click', (e) => { e.preventDefault(); document.getElementById('dlg-autoreply').close(); });
 
 els.btnHeaderAdd.addEventListener('click', addHeaderFromInput);
 els.headerKeyInput.addEventListener('keydown', (ev) => {

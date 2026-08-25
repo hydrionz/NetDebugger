@@ -199,6 +199,7 @@ pub fn run() {
             commands::list_projects,
             commands::create_session,
             commands::update_session,
+            commands::update_auto_replies,
             commands::delete_session,
             commands::load_messages,
             commands::clear_messages,
