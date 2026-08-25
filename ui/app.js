@@ -15,6 +15,7 @@ const state = {
   searchQuery: '',
   searchHits: [],
   activeHitIndex: -1,
+  advancedFilter: { direction: 'all', payloadType: 'all', minSize: null, maxSize: null, useRegex: false, regexPattern: '', jsonPath: '' },
   truncateMessages: true,  // 长消息截断显示（工具栏"截断"切换，localStorage 持久化）
   sendKeyMode: 'enter',  // 'enter' = Enter 发送/Shift+Enter 换行；'ctrlEnter' = Ctrl+Enter 发送/Enter 换行
   autoScroll: true,
@@ -90,6 +91,14 @@ const els = {
   timelineSearch: document.getElementById('timeline-search'),
   btnSearchClear: document.getElementById('btn-search-clear'),
   btnTruncateToggle: document.getElementById('btn-truncate-toggle'),
+  advancedFilterPanel: document.getElementById('advanced-filter-panel'),
+  filterDirection: document.getElementById('filter-direction'),
+  filterType: document.getElementById('filter-type'),
+  filterMinSize: document.getElementById('filter-min-size'),
+  filterMaxSize: document.getElementById('filter-max-size'),
+  filterUseRegex: document.getElementById('filter-use-regex'),
+  filterRegexPattern: document.getElementById('filter-regex-pattern'),
+  filterJsonPath: document.getElementById('filter-jsonpath'),
   settingsView: document.getElementById('dlg-settings'),
   settingMinimizeToTray: document.getElementById('setting-minimize-to-tray'),
   themeBtn: document.getElementById('btn-theme'),
@@ -129,6 +138,20 @@ function bytesToText(bytes) {
   } catch {
     return '[binary]';
   }
+}
+
+function hasJsonPath(obj, path) {
+  let p = path.trim().replace(/^\$\.?/, '');
+  if (!p) return true;
+  p = p.replace(/\[/g, '.').replace(/\]/g, '');
+  const parts = p.split('.').filter(Boolean);
+  let cur = obj;
+  for (const part of parts) {
+    if (cur == null || typeof cur !== 'object') return false;
+    if (!(part in cur)) return false;
+    cur = cur[part];
+  }
+  return true;
 }
 
 // 消息气泡显示的文本：二进制帧显示为十六进制，文本帧显示为 UTF-8 文本
@@ -1214,21 +1237,45 @@ function renderTimeline() {
     // 连接提示属于会话级事件，不随 endpoint 筛选隐藏；只按 endpoint 过滤真正的消息
     msgs = msgs.filter(m => m.payload_type === 'notice' || m.endpoint === filter);
   }
-  const q = state.searchQuery.trim().toLowerCase();
+  // 高级过滤
+  const af = state.advancedFilter;
+  if (af.direction !== 'all') msgs = msgs.filter(m => m.direction === af.direction);
+  if (af.payloadType !== 'all') msgs = msgs.filter(m => m.payload_type === af.payloadType);
+  if (af.minSize != null) msgs = msgs.filter(m => m.size >= af.minSize);
+  if (af.maxSize != null) msgs = msgs.filter(m => m.size <= af.maxSize);
+  if (af.jsonPath.trim()) {
+    const path = af.jsonPath.trim();
+    msgs = msgs.filter(m => {
+      if (m.payload_type === 'notice') return false;
+      try { const obj = JSON.parse(bytesToText(m.payload)); return hasJsonPath(obj, path); } catch { return false; }
+    });
+  }
+  const q = state.searchQuery.trim();
+  const qLower = q.toLowerCase();
+  let regexRe = null;
+  const regexPattern = af.regexPattern.trim();
+  if (af.useRegex && regexPattern) { try { regexRe = new RegExp(regexPattern, 'i'); } catch { regexRe = null; } }
+  if (regexRe) {
+    msgs = msgs.filter(m => m.payload_type !== 'notice' && regexRe.test(msgDisplayText(m)));
+  }
   if (q) {
-    msgs = msgs.filter(m => m.payload_type !== 'notice' && msgDisplayText(m).toLowerCase().includes(q));
+    const lower = q.toLowerCase();
+    msgs = msgs.filter(m => m.payload_type !== 'notice' && msgDisplayText(m).toLowerCase().includes(lower));
   }
 
   // 重建搜索命中列表（仅在搜索激活时填充），供 ↑/↓ 导航使用
   state.searchHits = [];
-  if (q) {
+  if (q || regexRe) {
     for (const m of msgs) {
-      const lower = msgDisplayText(m).toLowerCase();
+      const text = msgDisplayText(m);
       let count = 0;
-      let pos = 0;
-      while ((pos = lower.indexOf(q, pos)) !== -1) {
-        count++;
-        pos += q.length;
+      if (regexRe) {
+        const matches = text.match(new RegExp(regexRe.source, 'gi'));
+        count = matches ? matches.length : 0;
+      } else {
+        const lower = text.toLowerCase();
+        let pos = 0;
+        while ((pos = lower.indexOf(qLower, pos)) !== -1) { count++; pos += qLower.length; }
       }
       state.searchHits.push({ messageId: m.id, matchCount: count });
     }
@@ -2103,6 +2150,28 @@ if (els.btnSearchClear) {
     els.timelineSearch.dispatchEvent(new Event('input'));
   });
 }
+
+document.getElementById('btn-advanced-filter')?.addEventListener('click', () => {
+  els.advancedFilterPanel?.classList.toggle('hidden');
+});
+if (els.filterDirection) els.filterDirection.addEventListener('change', () => { state.advancedFilter.direction = els.filterDirection.value; renderTimeline(); });
+if (els.filterType) els.filterType.addEventListener('change', () => { state.advancedFilter.payloadType = els.filterType.value; renderTimeline(); });
+if (els.filterMinSize) els.filterMinSize.addEventListener('input', () => { const v = els.filterMinSize.value.trim(); state.advancedFilter.minSize = v === '' ? null : Math.max(0, parseInt(v, 10) || 0); renderTimeline(); });
+if (els.filterMaxSize) els.filterMaxSize.addEventListener('input', () => { const v = els.filterMaxSize.value.trim(); state.advancedFilter.maxSize = v === '' ? null : Math.max(0, parseInt(v, 10) || 0); renderTimeline(); });
+if (els.filterUseRegex) els.filterUseRegex.addEventListener('change', () => { state.advancedFilter.useRegex = els.filterUseRegex.checked; if (els.filterRegexPattern) els.filterRegexPattern.disabled = !els.filterUseRegex.checked; renderTimeline(); });
+if (els.filterRegexPattern) els.filterRegexPattern.addEventListener('input', () => { state.advancedFilter.regexPattern = els.filterRegexPattern.value; renderTimeline(); });
+if (els.filterJsonPath) els.filterJsonPath.addEventListener('input', () => { state.advancedFilter.jsonPath = els.filterJsonPath.value; renderTimeline(); });
+document.getElementById('btn-clear-advanced-filter')?.addEventListener('click', () => {
+  state.advancedFilter = { direction: 'all', payloadType: 'all', minSize: null, maxSize: null, useRegex: false, regexPattern: '', jsonPath: '' };
+  if (els.filterDirection) els.filterDirection.value = 'all';
+  if (els.filterType) els.filterType.value = 'all';
+  if (els.filterMinSize) els.filterMinSize.value = '';
+  if (els.filterMaxSize) els.filterMaxSize.value = '';
+  if (els.filterUseRegex) els.filterUseRegex.checked = false;
+  if (els.filterRegexPattern) { els.filterRegexPattern.value = ''; els.filterRegexPattern.disabled = true; }
+  if (els.filterJsonPath) els.filterJsonPath.value = '';
+  renderTimeline();
+});
 
 // 搜索框内 ↑/↓ 在命中间循环跳转，同时选中并把消息滚到可视区
 els.timelineSearch.addEventListener('keydown', (ev) => {

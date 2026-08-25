@@ -92,6 +92,11 @@
               <input type="text" id="timeline-search" placeholder="搜索消息..." />
               <button id="btn-search-clear" class="search-clear" type="button" data-tip="清空搜索" aria-label="清空搜索">×</button>
             </div>
+            <button id="btn-advanced-filter" class="icon-btn" data-tip="高级过滤" aria-label="高级过滤">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+              </svg>
+            </button>
             <div class="spacer"></div>
             <button id="btn-truncate-toggle" class="icon-btn truncate-toggle" type="button" data-tip="长消息截断显示（点击切换）" aria-label="长消息截断" aria-pressed="true">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -115,6 +120,18 @@
                 <path d="M10 11v6M14 11v6"/>
               </svg>
             </button>
+          </div>
+          <div id="advanced-filter-panel" class="advanced-filter-panel hidden">
+            <div class="advanced-filter-row">
+              <label>方向 <select id="filter-direction"><option value="all">全部</option><option value="in">接收</option><option value="out">发送</option></select></label>
+              <label>类型 <select id="filter-type"><option value="all">全部</option><option value="text">文本</option><option value="binary">二进制</option><option value="notice">系统</option></select></label>
+              <label>字节大小 <input type="number" id="filter-min-size" placeholder="最小" min="0" style="width:80px" /> - <input type="number" id="filter-max-size" placeholder="最大" min="0" style="width:80px" /></label>
+            </div>
+            <div class="advanced-filter-row">
+              <label><input type="checkbox" id="filter-use-regex" /> 正则 <input type="text" id="filter-regex-pattern" placeholder="正则表达式" style="width:180px" disabled /></label>
+              <label>JSONPath <input type="text" id="filter-jsonpath" placeholder="$.user.name 或 user[0].name" style="width:180px" /></label>
+              <button id="btn-clear-advanced-filter" class="icon-btn" style="margin-left:auto">清除</button>
+            </div>
           </div>
           <div id="timeline" class="timeline"></div>
           <div class="splitter splitter-h" id="splitter-send" data-tip="拖动调整高度"></div>

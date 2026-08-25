@@ -134,6 +134,18 @@ button:disabled {
   cursor: not-allowed;
 }
 
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 button.primary {
   background: var(--primary-bg);
   border-color: var(--primary-bg);
@@ -1628,6 +1640,36 @@ dialog select {
   padding: 4px 8px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+}
+
+.advanced-filter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.advanced-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.advanced-filter-row label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.advanced-filter-row select,
+.advanced-filter-row input[type="number"],
+.advanced-filter-row input[type="text"] {
+  padding: 2px 6px;
+  font-size: 12px;
 }
 
 #timeline-search {
