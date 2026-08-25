@@ -257,16 +257,13 @@ async fn run_client_socket_loop<S>(
                         if !compiled.is_empty() {
                             if let Some((reply_bytes, is_text, delay_ms)) = match_auto_reply(&text, &compiled) {
                                 if delay_ms > 0 { tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await; }
-                                let (ptype, payload) = if is_text { ("text", reply_bytes.clone()) } else { ("binary", reply_bytes.clone()) };
-                                persist_out_message(&db, &session_id, Some(&client_id), ptype, reply_bytes.clone(), Some(&endpoint), &handle).await;
-                                let send_res = if is_text {
-                                    write.send(WsMessage::Text(String::from_utf8_lossy(&payload).into_owned().into())).await
+                                let ts = chrono::Utc::now().timestamp_millis();
+                                persist_auto_reply_pair(&db, &handle, &session_id, &client_id, &endpoint, remote_addr_ref, reply_bytes.clone(), is_text, ts).await;
+                                let _ = if is_text {
+                                    write.send(WsMessage::Text(String::from_utf8_lossy(&reply_bytes).into_owned().into())).await
                                 } else {
-                                    write.send(WsMessage::Binary(payload.into())).await
+                                    write.send(WsMessage::Binary(reply_bytes.into())).await
                                 };
-                                if send_res.is_ok() {
-                                    persist_notice(&db, &handle, &session_id, format!("↻ 自动回复【{}】", remote_addr_ref)).await;
-                                }
                             }
                         }
                     }
@@ -283,16 +280,13 @@ async fn run_client_socket_loop<S>(
                             let txt = String::from_utf8_lossy(&bin).into_owned();
                             if let Some((reply_bytes, is_text, delay_ms)) = match_auto_reply(&txt, &compiled) {
                                 if delay_ms > 0 { tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await; }
-                                let (ptype, payload) = if is_text { ("text", reply_bytes.clone()) } else { ("binary", reply_bytes.clone()) };
-                                persist_out_message(&db, &session_id, Some(&client_id), ptype, reply_bytes.clone(), Some(&endpoint), &handle).await;
-                                let send_res = if is_text {
-                                    write.send(WsMessage::Text(String::from_utf8_lossy(&payload).into_owned().into())).await
+                                let ts = chrono::Utc::now().timestamp_millis();
+                                persist_auto_reply_pair(&db, &handle, &session_id, &client_id, &endpoint, remote_addr_ref, reply_bytes.clone(), is_text, ts).await;
+                                let _ = if is_text {
+                                    write.send(WsMessage::Text(String::from_utf8_lossy(&reply_bytes).into_owned().into())).await
                                 } else {
-                                    write.send(WsMessage::Binary(payload.into())).await
+                                    write.send(WsMessage::Binary(reply_bytes.into())).await
                                 };
-                                if send_res.is_ok() {
-                                    persist_notice(&db, &handle, &session_id, format!("↻ 自动回复【{}】", remote_addr_ref)).await;
-                                }
                             }
                         }
                     }
@@ -794,6 +788,70 @@ async fn persist_notice(
         timestamp,
     })
     .await;
+}
+
+async fn persist_auto_reply_pair(
+    db: &db::DbConnection,
+    handle: &Arc<SessionHandle>,
+    session_id: &str,
+    client_id: &str,
+    endpoint: &str,
+    remote_addr: &str,
+    reply_bytes: Vec<u8>,
+    is_text: bool,
+    ts: i64,
+) {
+    // 提示与气泡共用同一时间戳，以气泡时间为准
+    let notice_text = format!("↻ 自动回复【{}】", remote_addr);
+    let notice_msg = db::Message {
+        id: Uuid::new_v4().to_string(),
+        session_id: session_id.to_string(),
+        client_id: None,
+        direction: "in".to_string(),
+        payload_type: "notice".to_string(),
+        payload: notice_text.clone().into_bytes(),
+        size: notice_text.len(),
+        timestamp: ts,
+        endpoint: None,
+        sender: None,
+    };
+    let _ = db::insert_message(db, &notice_msg).await;
+    send_timeline_event(handle, TimelineEvent::Notice {
+        session_id: session_id.to_string(),
+        text: notice_text,
+        timestamp: ts,
+    })
+    .await;
+
+    let ptype = if is_text { "text" } else { "binary" };
+    let size = reply_bytes.len();
+    let out_msg = db::Message {
+        id: Uuid::new_v4().to_string(),
+        session_id: session_id.to_string(),
+        client_id: Some(client_id.to_string()),
+        direction: "out".to_string(),
+        payload_type: ptype.to_string(),
+        payload: reply_bytes.clone(),
+        size,
+        timestamp: ts,
+        endpoint: Some(endpoint.to_string()),
+        sender: None,
+    };
+    let _ = db::insert_message(db, &out_msg).await;
+    let event = TimelineEvent::Message {
+        id: out_msg.id.clone(),
+        session_id: out_msg.session_id.clone(),
+        client_id: out_msg.client_id.clone(),
+        direction: out_msg.direction.clone(),
+        payload_type: out_msg.payload_type.clone(),
+        endpoint: out_msg.endpoint.clone(),
+        sender: None,
+        payload: reply_bytes.clone(),
+        size,
+        timestamp: ts,
+    };
+    send_timeline_event(handle, event.clone()).await;
+    let _ = handle.app.emit("session:message", event);
 }
 
 /// 客户端展示的地址：去掉 ws:// / wss:// 前缀，只保留 host:port（可能带路径）。
