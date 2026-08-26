@@ -27,6 +27,7 @@ const state = {
   autoReplyDraft: [],
   templates: [],
   activeTemplate: null,
+  diffBaseId: null,
 };
 
 const els = {
@@ -197,6 +198,45 @@ async function copyWithToast(text, label) {
   } catch (e) {
     showError('复制失败: ' + e);
   }
+}
+
+function getDiffText(m) {
+  if (m.payload_type === 'binary') return bytesToHex(m.payload);
+  const raw = bytesToText(m.payload);
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed !== null && typeof parsed === 'object') return JSON.stringify(parsed, null, 2);
+  } catch {}
+  return raw;
+}
+
+// ponytail: O(n*m) LCS, fine for typical messages (<500 lines); large payloads may be slow — switch to streaming diff if needed
+function diffLines(aLines, bLines) {
+  const m = aLines.length;
+  const n = bLines.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (aLines[i - 1] === bLines[j - 1]) dp[i][j] = dp[i - 1][j - 1] + 1;
+      else dp[i][j] = dp[i - 1][j] >= dp[i][j - 1] ? dp[i - 1][j] : dp[i][j - 1];
+    }
+  }
+  const ops = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && aLines[i - 1] === bLines[j - 1]) {
+      ops.push({ type: 'equal', a: aLines[i - 1], b: bLines[j - 1] });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      ops.push({ type: 'insert', b: bLines[j - 1] });
+      j--;
+    } else {
+      ops.push({ type: 'delete', a: aLines[i - 1] });
+      i--;
+    }
+  }
+  ops.reverse();
+  return ops;
 }
 
 function hasJsonPath(obj, path) {
@@ -538,6 +578,7 @@ function ensureMsgMenu() {
         <div class="context-menu-item" data-msg-ctx="copy-curl"><span class="ctx-icon">⎘</span><span class="ctx-label">cURL</span></div>
       </div>
     </div>
+    <div class="context-menu-item" data-msg-ctx="diff"><span class="ctx-icon">◨</span><span class="ctx-label" id="msg-diff-label">对比...</span></div>
     <div class="context-menu-separator"></div>
     <div class="context-menu-item" data-msg-ctx="delete"><span class="ctx-icon">×</span><span class="ctx-label">删除</span></div>
   `;
@@ -556,6 +597,8 @@ function ensureMsgMenu() {
       await deleteMessage(messageId);
     } else if (ctx.startsWith('copy-')) {
       copyMessageAs(messageId, ctx.slice(5));
+    } else if (ctx === 'diff') {
+      handleDiffSelection(messageId);
     }
   });
 
@@ -584,6 +627,95 @@ function copyMessageAs(messageId, format) {
   copyWithToast(text, label);
 }
 
+function handleDiffSelection(messageId) {
+  const msgs = state.messages.get(state.selectedSessionId) || [];
+  const m = msgs.find((x) => x.id === messageId);
+  if (!m || m.payload_type === 'notice') { showError('该消息不可对比'); return; }
+  if (state.diffBaseId === null) {
+    state.diffBaseId = messageId;
+    showToast('已选择基准消息，再选一条进行对比');
+    renderTimeline();
+  } else if (state.diffBaseId === messageId) {
+    state.diffBaseId = null;
+    showToast('已取消对比选择');
+    renderTimeline();
+  } else {
+    const a = state.diffBaseId;
+    const b = messageId;
+    state.diffBaseId = null;
+    renderTimeline();
+    openDiffDialog(a, b);
+  }
+}
+
+function openDiffDialog(aId, bId) {
+  const msgs = state.messages.get(state.selectedSessionId) || [];
+  const ma = msgs.find((x) => x.id === aId);
+  const mb = msgs.find((x) => x.id === bId);
+  if (!ma || !mb) { showError('消息不存在'); return; }
+  const dlg = document.getElementById('dlg-diff');
+  if (!dlg) return;
+  dlg.dataset.aId = aId;
+  dlg.dataset.bId = bId;
+  renderDiff(aId, bId);
+  dlg.showModal();
+}
+
+function renderDiff(aId, bId) {
+  const msgs = state.messages.get(state.selectedSessionId) || [];
+  const ma = msgs.find((x) => x.id === aId);
+  const mb = msgs.find((x) => x.id === bId);
+  if (!ma || !mb) return;
+  const metaA = document.getElementById('diff-meta-a');
+  const metaB = document.getElementById('diff-meta-b');
+  const body = document.getElementById('diff-body');
+  if (!metaA || !metaB || !body) return;
+  const fmtMeta = (m) => `${m.direction === 'in' ? '↓ 接收' : '↑ 发送'} · ${formatTime(m.timestamp)} · ${m.endpoint || '—'} · ${escapeHtml(m.payload_type)} · ${formatBytes(m.payload)}`;
+  metaA.textContent = 'A: ' + fmtMeta(ma);
+  metaB.textContent = 'B: ' + fmtMeta(mb);
+  const aText = getDiffText(ma);
+  const bText = getDiffText(mb);
+  const aLines = aText.split('\n');
+  const bLines = bText.split('\n');
+  const ops = diffLines(aLines, bLines);
+  if (ops.length === 0) {
+    body.innerHTML = '<div class="diff-empty-hint">两条消息完全相同</div>';
+    return;
+  }
+  let html = '';
+  for (const op of ops) {
+    if (op.type === 'equal') {
+      html += `<div class="diff-row"><div class="diff-cell equal">${escapeHtml(op.a)}</div><div class="diff-cell equal">${escapeHtml(op.b)}</div></div>`;
+    } else if (op.type === 'delete') {
+      html += `<div class="diff-row"><div class="diff-cell delete">${escapeHtml(op.a)}</div><div class="diff-cell empty"></div></div>`;
+    } else {
+      html += `<div class="diff-row"><div class="diff-cell empty"></div><div class="diff-cell insert">${escapeHtml(op.b)}</div></div>`;
+    }
+  }
+  body.innerHTML = html;
+  body.scrollTop = 0;
+}
+
+function closeDiffDialog() {
+  const dlg = document.getElementById('dlg-diff');
+  if (dlg) dlg.close();
+}
+
+document.getElementById('btn-diff-close')?.addEventListener('click', closeDiffDialog);
+document.getElementById('btn-diff-close2')?.addEventListener('click', closeDiffDialog);
+document.getElementById('btn-diff-swap')?.addEventListener('click', () => {
+  const dlg = document.getElementById('dlg-diff');
+  if (!dlg) return;
+  const a = dlg.dataset.aId, b = dlg.dataset.bId;
+  if (!a || !b) return;
+  dlg.dataset.aId = b;
+  dlg.dataset.bId = a;
+  renderDiff(b, a);
+});
+document.getElementById('dlg-diff')?.addEventListener('click', (e) => {
+  if (e.target.id === 'dlg-diff') closeDiffDialog();
+});
+
 function showMsgMenu(x, y, messageId) {
   ensureMsgMenu();
   if (typeof hideCopyAsMenu === 'function') hideCopyAsMenu();
@@ -592,6 +724,18 @@ function showMsgMenu(x, y, messageId) {
   const msgs = state.messages.get(state.selectedSessionId) || [];
   const m = msgs.find((m) => m.id === messageId);
   msgMenuEl.querySelector('[data-msg-ctx="resend"]').classList.toggle('disabled', !(m && m.payload_type === 'text'));
+  const diffItem = msgMenuEl.querySelector('[data-msg-ctx="diff"]');
+  if (diffItem) {
+    const label = diffItem.querySelector('#msg-diff-label');
+    if (state.diffBaseId === null) {
+      if (label) label.textContent = '选择为对比基准';
+    } else if (state.diffBaseId === messageId) {
+      if (label) label.textContent = '取消对比选择';
+    } else {
+      if (label) label.textContent = '与基准对比';
+    }
+    diffItem.classList.toggle('disabled', !m || m.payload_type === 'notice');
+  }
   msgMenuEl.classList.remove('hidden');
   msgMenuEl.style.left = x + 'px';
   msgMenuEl.style.top = y + 'px';
@@ -637,6 +781,9 @@ async function deleteMessage(messageId) {
     if (state.selectedMessageId === messageId) {
       state.selectedMessageId = null;
       renderDetail();
+    }
+    if (state.diffBaseId === messageId) {
+      state.diffBaseId = null;
     }
     renderTimeline();
   } catch (e) {
@@ -1160,6 +1307,7 @@ function toggleSessionCollapse(id) {
 async function selectSession(id, endpoint) {
   state.selectedSessionId = id;
   state.selectedMessageId = null;
+  state.diffBaseId = null;
   state.selectedClientId = null;
   state.clients.set(id, []);
   state.endpointFilter.set(id, endpoint || 'all');
@@ -1401,11 +1549,12 @@ function renderTimeline() {
       continue;
     }
     const el = document.createElement('div');
-    el.className = 'message ' + m.direction + (m.id === state.selectedMessageId ? ' selected' : '');
+    el.className = 'message ' + m.direction + (m.id === state.selectedMessageId ? ' selected' : '') + (m.id === state.diffBaseId ? ' diff-base' : '');
     el.dataset.id = m.id;
     const text = msgDisplayText(m);
     const epBadge = m.endpoint ? `<span class="msg-endpoint">${escapeHtml(m.endpoint)}</span>` : '';
     const sender = m.direction === 'in' ? getSenderLabel(id, m) : '';
+    const diffBadge = m.id === state.diffBaseId ? `<span class="msg-hit-count" style="background:var(--selected-bg); color:var(--accent); border-color:var(--accent)">基准</span>` : '';
     const matchCount = hitCountById.get(m.id) || 0;
     const hitBadge = matchCount > 1
       ? `<span class="msg-hit-count" data-tip="本条消息共 ${matchCount} 处匹配">${matchCount} matches</span>`
@@ -1440,6 +1589,7 @@ function renderTimeline() {
         <span class="msg-type ${m.payload_type === 'binary' ? 'binary' : 'txt'}">${m.payload_type === 'binary' ? 'BIN' : 'TXT'}</span>
         ${epBadge}
         ${sender}
+        ${diffBadge}
         ${hitBadge}
       </div>
       <div class="message-body">${body}</div>
@@ -1783,6 +1933,7 @@ async function clearMessages() {
   try {
     await invoke('clear_messages', { sessionId: id });
     state.messages.set(id, []);
+    state.diffBaseId = null;
     state.unreadCounts.delete(id);
     renderProjectTree();
     renderTimeline();

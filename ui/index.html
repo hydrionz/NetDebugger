@@ -477,6 +477,24 @@
     </div>
   </dialog>
 
+  <dialog id="dlg-diff" class="app-dialog" style="width:850px; max-width:95vw; height:560px; max-height:85vh; max-width:none">
+    <div class="app-dialog-body" style="height:100%; display:flex; flex-direction:column; min-height:0">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+        <span style="font-weight:600">消息对比</span>
+        <button id="btn-diff-close" class="copy-btn" aria-label="关闭" style="font-size:14px">✕</button>
+      </div>
+      <div style="display:flex; gap:8px; font-size:11px; color:var(--text-muted); margin-bottom:6px">
+        <div id="diff-meta-a" style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></div>
+        <div id="diff-meta-b" style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></div>
+      </div>
+      <div id="diff-body" style="flex:1; overflow:auto; border:1px solid var(--border); border-radius:4px; background:var(--surface); min-height:0"></div>
+      <div class="dialog-actions">
+        <button id="btn-diff-close2">关闭</button>
+        <button id="btn-diff-swap">交换</button>
+      </div>
+    </div>
+  </dialog>
+
   <div id="toast-container" class="toast-container hidden"></div>
 
   <script src="app.js"></script>

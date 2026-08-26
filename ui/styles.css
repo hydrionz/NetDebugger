@@ -704,6 +704,11 @@ body.resizing-h {
   background: var(--surface-hover);
 }
 
+.message.diff-base {
+  outline: 2px dashed var(--accent);
+  outline-offset: 1px;
+}
+
 .message.in {
   align-self: flex-start;
   border-left: 4px solid var(--accent);
@@ -1216,6 +1221,84 @@ body.resizing-h {
   height: 1px;
   background: var(--border);
   margin: 3px 4px;
+}
+
+#dlg-diff {
+  width: 850px;
+  max-width: 95vw;
+}
+
+.diff-row {
+  display: flex;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  border-bottom: 1px solid var(--border);
+}
+
+.diff-row:last-child {
+  border-bottom: none;
+}
+
+.diff-cell {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-right: 1px solid var(--border);
+}
+
+.diff-cell:last-child {
+  border-right: none;
+}
+
+.diff-cell.empty {
+  background: var(--bg);
+}
+
+.diff-cell.equal {
+  background: var(--surface);
+}
+
+.diff-cell.delete {
+  background: rgba(196, 43, 28, 0.12);
+}
+
+.diff-cell.insert {
+  background: rgba(16, 124, 16, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  .diff-cell.delete {
+    background: rgba(244, 135, 113, 0.18);
+  }
+  .diff-cell.insert {
+    background: rgba(137, 209, 133, 0.18);
+  }
+}
+
+:root[data-theme="dark"] .diff-cell.delete {
+  background: rgba(244, 135, 113, 0.18);
+}
+
+:root[data-theme="dark"] .diff-cell.insert {
+  background: rgba(137, 209, 133, 0.18);
+}
+
+:root[data-theme="light"] .diff-cell.delete {
+  background: rgba(196, 43, 28, 0.12);
+}
+
+:root[data-theme="light"] .diff-cell.insert {
+  background: rgba(16, 124, 16, 0.12);
+}
+
+.diff-empty-hint {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .detail-empty {
