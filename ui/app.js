@@ -28,6 +28,8 @@ const state = {
   templates: [],
   activeTemplate: null,
   diffBaseId: null,
+  statsPeak: new Map(),
+  statsWindows: new Map(),
 };
 
 const els = {
@@ -1375,6 +1377,9 @@ async function deleteSession(id) {
   try {
     await invoke('delete_session', { id });
     state.unreadCounts.delete(id);
+    state.statsPeak.delete(id);
+    state.statsWindows.delete(id);
+    state.messages.delete(id);
     if (state.selectedSessionId === id) selectSession(null);
     await loadProjects();
   } catch (e) {
@@ -1725,6 +1730,72 @@ function renderTimeline() {
   if (state.autoScroll) {
     els.timeline.scrollTop = els.timeline.scrollHeight;
   }
+  renderStats();
+}
+
+function formatBytesShort(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(2) + ' MB';
+}
+
+function renderStats() {
+  const panel = document.getElementById('stats-panel');
+  if (!panel) return;
+  const id = state.selectedSessionId;
+  if (!id) { panel.classList.add('hidden'); return; }
+  const msgs = state.messages.get(id) || [];
+  let total = 0, upCount = 0, downCount = 0, upBytes = 0, downBytes = 0;
+  for (const m of msgs) {
+    if (m.payload_type === 'notice') continue;
+    total++;
+    if (m.direction === 'out') { upCount++; upBytes += m.size; }
+    else if (m.direction === 'in') { downCount++; downBytes += m.size; }
+  }
+  const now = Date.now();
+  let winCount = 0, winBytes = 0, winUp = 0, winDown = 0, winUpBytes = 0, winDownBytes = 0;
+  for (const m of msgs) {
+    if (m.payload_type === 'notice') continue;
+    if (now - m.timestamp < 1000) {
+      winCount++; winBytes += m.size;
+      if (m.direction === 'out') { winUp++; winUpBytes += m.size; }
+      else if (m.direction === 'in') { winDown++; winDownBytes += m.size; }
+    }
+  }
+  let peak = state.statsPeak.get(id);
+  if (!peak) { peak = { msg: 0, bytes: 0, upMsg: 0, downMsg: 0, upBytes: 0, downBytes: 0 }; state.statsPeak.set(id, peak); }
+  if (winCount > peak.msg) peak.msg = winCount;
+  if (winBytes > peak.bytes) peak.bytes = winBytes;
+  if (winUp > (peak.upMsg || 0)) peak.upMsg = winUp;
+  if (winDown > (peak.downMsg || 0)) peak.downMsg = winDown;
+  if (winUpBytes > (peak.upBytes || 0)) peak.upBytes = winUpBytes;
+  if (winDownBytes > (peak.downBytes || 0)) peak.downBytes = winDownBytes;
+  if (panel.classList.contains('hidden')) return;
+  const totalEl = document.getElementById('stats-total');
+  const upEl = document.getElementById('stats-up');
+  const downEl = document.getElementById('stats-down');
+  const rateEl = document.getElementById('stats-rate');
+  const peakUpEl = document.getElementById('stats-peak-up');
+  const peakDownEl = document.getElementById('stats-peak-down');
+  const iconUp = '<svg class="stats-icon stats-up-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>';
+  const iconDown = '<svg class="stats-icon stats-down-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>';
+  if (totalEl) totalEl.textContent = `总计 ${total}`;
+  if (upEl) upEl.innerHTML = iconUp + ` ${upCount} · ${formatBytesShort(upBytes)}`;
+  if (downEl) downEl.innerHTML = iconDown + ` ${downCount} · ${formatBytesShort(downBytes)}`;
+  if (rateEl) rateEl.textContent = `${winCount} msg/s · ${formatBytesShort(winBytes)}/s`;
+  if (peakUpEl) peakUpEl.innerHTML = iconUp + `峰值 ${peak.upMsg} msg/s · ${formatBytesShort(peak.upBytes || 0)}/s`;
+  if (peakDownEl) peakDownEl.innerHTML = iconDown + `峰值 ${peak.downMsg} msg/s · ${formatBytesShort(peak.downBytes || 0)}/s`;
+}
+
+function initStats() {
+  const btn = document.getElementById('btn-stats');
+  const panel = document.getElementById('stats-panel');
+  if (!btn || !panel) return;
+  btn.addEventListener('click', () => {
+    panel.classList.toggle('hidden');
+    if (!panel.classList.contains('hidden')) renderStats();
+  });
+  setInterval(() => renderStats(), 1000);
 }
 
 function renderDetail() {
@@ -2042,6 +2113,8 @@ async function clearMessages() {
     await invoke('clear_messages', { sessionId: id });
     state.messages.set(id, []);
     state.diffBaseId = null;
+    state.statsPeak.delete(id);
+    state.statsWindows.delete(id);
     state.unreadCounts.delete(id);
     renderProjectTree();
     renderTimeline();
@@ -2774,6 +2847,25 @@ listen('session:message', (ev) => {
   if (data && data.session_id && data.direction === 'in') {
     incrementUnread(data.session_id, data.endpoint || null);
   }
+  // 流量统计峰值：后台按会话维护 1s 滑窗，及时刷新 peak，即使面板隐藏或会话未选中
+  if (data && data.session_id && data.payload_type !== 'notice') {
+    const sid = data.session_id;
+    let win = state.statsWindows.get(sid);
+    if (!win) { win = []; state.statsWindows.set(sid, win); }
+    win.push({ ts: data.timestamp, size: data.size, dir: data.direction });
+    const cutoff = data.timestamp - 1000;
+    while (win.length && win[0].ts < cutoff) win.shift();
+    let cnt = win.length, bytes = 0, up = 0, down = 0, upB = 0, downB = 0;
+    for (const e of win) { bytes += e.size; if (e.dir === 'out') { up++; upB += e.size; } else if (e.dir === 'in') { down++; downB += e.size; } }
+    let peak = state.statsPeak.get(sid);
+    if (!peak) { peak = { msg: 0, bytes: 0, upMsg: 0, downMsg: 0, upBytes: 0, downBytes: 0 }; state.statsPeak.set(sid, peak); }
+    if (cnt > peak.msg) peak.msg = cnt;
+    if (bytes > peak.bytes) peak.bytes = bytes;
+    if (up > peak.upMsg) peak.upMsg = up;
+    if (down > peak.downMsg) peak.downMsg = down;
+    if (upB > peak.upBytes) peak.upBytes = upB;
+    if (downB > peak.downBytes) peak.downBytes = downB;
+  }
 }).catch((e) => console.error('listen session:message failed', e));
 
 listen('session:client_connected', async (ev) => {
@@ -3338,6 +3430,7 @@ async function initTheme() {
   initSettingsMenu();
   initSendKeyMode();
   initTruncateToggle();
+  initStats();
   initTemplateResize();
   initTemplateDrag();
   loadTemplates();
