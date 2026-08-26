@@ -1154,6 +1154,42 @@ body.resizing-h {
   background: transparent;
 }
 
+.context-menu-item.has-submenu {
+  position: relative;
+}
+
+.ctx-arrow {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.context-submenu {
+  position: absolute;
+  left: 100%;
+  top: -4px;
+  min-width: 120px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  padding: 2px;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 10000;
+}
+
+.context-menu-item.has-submenu:hover > .context-submenu {
+  display: flex;
+}
+
+.context-submenu.flip {
+  left: auto;
+  right: 100%;
+}
+
 .ctx-icon {
   width: 14px;
   text-align: center;
@@ -1174,6 +1210,12 @@ body.resizing-h {
 .context-menu-item[data-ctx="delete"]:hover,
 .context-menu-item[data-msg-ctx="delete"]:hover {
   background: var(--error-soft);
+}
+
+.context-menu-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 4px;
 }
 
 .detail-empty {

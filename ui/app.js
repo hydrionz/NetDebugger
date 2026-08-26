@@ -140,6 +140,65 @@ function bytesToText(bytes) {
   }
 }
 
+function bytesToBase64(bytes) {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
+function bytesToEscaped(bytes) {
+  return JSON.stringify(bytesToText(bytes));
+}
+
+function buildCurlCommand(session, msg) {
+  // 协议自适应：WS 显示 cURL，未来 MQTT 可显示 mosquitto_pub 等
+  let url = '';
+  if (session) {
+    if (session.role === 'client') {
+      url = session.target_url || '';
+      if (msg.endpoint && !url.includes(msg.endpoint)) {
+        url = url.replace(/\/+$/, '') + msg.endpoint;
+      }
+    } else {
+      const port = extractPort(session.bind_addr) || '8080';
+      url = `ws://127.0.0.1:${port}`;
+      if (msg.endpoint) url += msg.endpoint;
+      else if (session.endpoints && session.endpoints[0]) url += session.endpoints[0];
+    }
+    if (url && !/^wss?:\/\//.test(url)) url = 'ws://' + url;
+  }
+  if (!url) url = 'ws://127.0.0.1:8080/';
+  const text = bytesToText(msg.payload);
+  const escaped = text.replace(/'/g, `'\\''`);
+  let headerArgs = '';
+  if (session && session.headers) {
+    for (const [k, v] of Object.entries(session.headers)) {
+      const hv = `${k}: ${v}`.replace(/'/g, `'\\''`);
+      headerArgs += ` \\\n  -H '${hv}'`;
+    }
+  }
+  if (session && session.subprotocols && session.subprotocols.length) {
+    const sp = session.subprotocols.join(', ').replace(/'/g, `'\\''`);
+    headerArgs += ` \\\n  -H 'Sec-WebSocket-Protocol: ${sp}'`;
+  }
+  const baseHeaders = `  -H 'Connection: Upgrade' \\\n  -H 'Upgrade: websocket' \\\n  -H 'Sec-WebSocket-Version: 13' \\\n  -H 'Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw=='`;
+  if (msg.payload_type === 'binary') {
+    const b64 = bytesToBase64(msg.payload);
+    const hex = bytesToHex(msg.payload);
+    return `curl -i -N \\\n${baseHeaders}${headerArgs} \\\n  '${url}' \\\n  --data-binary $'${escaped}'\n# binary base64: ${b64}\n# hex: ${hex}`;
+  }
+  return `curl -i -N \\\n${baseHeaders}${headerArgs} \\\n  '${url}' \\\n  --data-raw '${escaped}'`;
+}
+
+async function copyWithToast(text, label) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('已复制为 ' + label);
+  } catch (e) {
+    showError('复制失败: ' + e);
+  }
+}
+
 function hasJsonPath(obj, path) {
   let p = path.trim().replace(/^\$\.?/, '');
   if (!p) return true;
@@ -470,6 +529,16 @@ function ensureMsgMenu() {
   msgMenuEl.className = 'context-menu hidden';
   msgMenuEl.innerHTML = `
     <div class="context-menu-item" data-msg-ctx="resend"><span class="ctx-icon">↻</span><span class="ctx-label">再次发送</span></div>
+    <div class="context-menu-item has-submenu" data-msg-ctx="copy-parent"><span class="ctx-icon">⧉</span><span class="ctx-label">复制为 ...</span><span class="ctx-arrow">▶</span>
+      <div class="context-submenu">
+        <div class="context-menu-item" data-msg-ctx="copy-raw"><span class="ctx-icon">⧉</span><span class="ctx-label">Raw</span></div>
+        <div class="context-menu-item" data-msg-ctx="copy-hex"><span class="ctx-icon">⬡</span><span class="ctx-label">Hex</span></div>
+        <div class="context-menu-item" data-msg-ctx="copy-base64"><span class="ctx-icon">⬢</span><span class="ctx-label">Base64</span></div>
+        <div class="context-menu-item" data-msg-ctx="copy-escaped"><span class="ctx-icon">❞</span><span class="ctx-label">Escaped</span></div>
+        <div class="context-menu-item" data-msg-ctx="copy-curl"><span class="ctx-icon">⎘</span><span class="ctx-label">cURL</span></div>
+      </div>
+    </div>
+    <div class="context-menu-separator"></div>
     <div class="context-menu-item" data-msg-ctx="delete"><span class="ctx-icon">×</span><span class="ctx-label">删除</span></div>
   `;
   document.body.appendChild(msgMenuEl);
@@ -478,11 +547,15 @@ function ensureMsgMenu() {
     const item = e.target.closest('[data-msg-ctx]');
     const messageId = msgMenuEl.dataset.targetId;
     if (!item || item.classList.contains('disabled') || !messageId) return;
+    const ctx = item.dataset.msgCtx;
+    if (ctx === 'copy-parent') return;
     hideMsgMenu();
-    if (item.dataset.msgCtx === 'resend') {
+    if (ctx === 'resend') {
       resendMessage(messageId);
-    } else if (item.dataset.msgCtx === 'delete') {
+    } else if (ctx === 'delete') {
       await deleteMessage(messageId);
+    } else if (ctx.startsWith('copy-')) {
+      copyMessageAs(messageId, ctx.slice(5));
     }
   });
 
@@ -490,8 +563,30 @@ function ensureMsgMenu() {
   document.addEventListener('scroll', hideMsgMenu, true);
 }
 
+function copyMessageAs(messageId, format) {
+  const id = state.selectedSessionId;
+  if (!id) return;
+  const msgs = state.messages.get(id) || [];
+  const m = msgs.find((x) => x.id === messageId);
+  if (!m) return;
+  if (m.payload_type === 'notice') return;
+  const session = findSession(id);
+  let text = '';
+  let label = format;
+  switch (format) {
+    case 'raw': text = bytesToText(m.payload); label = 'Raw'; break;
+    case 'hex': text = bytesToHex(m.payload); label = 'Hex'; break;
+    case 'base64': text = bytesToBase64(m.payload); label = 'Base64'; break;
+    case 'escaped': text = bytesToEscaped(m.payload); label = 'Escaped'; break;
+    case 'curl': text = buildCurlCommand(session, m); label = 'cURL'; break;
+    default: return;
+  }
+  copyWithToast(text, label);
+}
+
 function showMsgMenu(x, y, messageId) {
   ensureMsgMenu();
+  if (typeof hideCopyAsMenu === 'function') hideCopyAsMenu();
   msgMenuEl.dataset.targetId = messageId;
   // 仅文本消息可再次发送
   const msgs = state.messages.get(state.selectedSessionId) || [];
@@ -506,6 +601,11 @@ function showMsgMenu(x, y, messageId) {
   }
   if (rect.bottom > window.innerHeight) {
     msgMenuEl.style.top = Math.max(0, window.innerHeight - rect.height) + 'px';
+  }
+  const sub = msgMenuEl.querySelector('.context-submenu');
+  if (sub) {
+    const needFlip = rect.right + 130 > window.innerWidth;
+    sub.classList.toggle('flip', needFlip);
   }
 }
 
@@ -2315,6 +2415,74 @@ document.getElementById('btn-copy-message').addEventListener('click', async () =
   } catch (e) {
     showError('复制失败: ' + e);
   }
+});
+
+// 详情面板「复制为 ...」下拉（协议自适应：WS 显示 cURL）
+let copyAsMenuEl = null;
+function ensureCopyAsMenu() {
+  if (copyAsMenuEl) return;
+  copyAsMenuEl = document.createElement('div');
+  copyAsMenuEl.className = 'context-menu hidden';
+  copyAsMenuEl.innerHTML = `
+    <div class="context-menu-item" data-copy-as="raw"><span class="ctx-icon">⧉</span><span class="ctx-label">Raw</span></div>
+    <div class="context-menu-item" data-copy-as="hex"><span class="ctx-icon">⬡</span><span class="ctx-label">Hex</span></div>
+    <div class="context-menu-item" data-copy-as="base64"><span class="ctx-icon">⬢</span><span class="ctx-label">Base64</span></div>
+    <div class="context-menu-item" data-copy-as="escaped"><span class="ctx-icon">❞</span><span class="ctx-label">Escaped</span></div>
+    <div class="context-menu-item" data-copy-as="curl"><span class="ctx-icon">⎘</span><span class="ctx-label">cURL</span></div>
+  `;
+  document.body.appendChild(copyAsMenuEl);
+  copyAsMenuEl.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-copy-as]');
+    if (!item) return;
+    hideCopyAsMenu();
+    copySelectedAs(item.dataset.copyAs);
+  });
+  document.addEventListener('click', hideCopyAsMenu);
+  document.addEventListener('scroll', hideCopyAsMenu, true);
+}
+function showCopyAsMenu(x, y) {
+  ensureCopyAsMenu();
+  hideMsgMenu();
+  copyAsMenuEl.classList.remove('hidden');
+  copyAsMenuEl.style.left = x + 'px';
+  copyAsMenuEl.style.top = y + 'px';
+  const rect = copyAsMenuEl.getBoundingClientRect();
+  if (rect.right > window.innerWidth) copyAsMenuEl.style.left = Math.max(0, window.innerWidth - rect.width) + 'px';
+  if (rect.bottom > window.innerHeight) copyAsMenuEl.style.top = Math.max(0, window.innerHeight - rect.height) + 'px';
+}
+function hideCopyAsMenu() {
+  if (copyAsMenuEl) copyAsMenuEl.classList.add('hidden');
+}
+function copySelectedAs(format) {
+  const msgs = state.messages.get(state.selectedSessionId) || [];
+  const m = msgs.find((x) => x.id === state.selectedMessageId);
+  if (!m) { showError('请先选择一条消息'); return; }
+  if (m.payload_type === 'notice') return;
+  const session = findSession(state.selectedSessionId);
+  let text = '';
+  let label = format;
+  switch (format) {
+    case 'raw': text = bytesToText(m.payload); label = 'Raw'; break;
+    case 'hex': text = bytesToHex(m.payload); label = 'Hex'; break;
+    case 'base64': text = bytesToBase64(m.payload); label = 'Base64'; break;
+    case 'escaped': text = bytesToEscaped(m.payload); label = 'Escaped'; break;
+    case 'curl': text = buildCurlCommand(session, m); label = 'cURL'; break;
+    default: return;
+  }
+  copyWithToast(text, label);
+}
+document.getElementById('btn-copy-as')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const msgs = state.messages.get(state.selectedSessionId) || [];
+  const m = msgs.find((x) => x.id === state.selectedMessageId);
+  if (!m) { showError('请先选择一条消息'); return; }
+  const rect = e.currentTarget.getBoundingClientRect();
+  const x = rect.left;
+  const y = rect.bottom + 4;
+  // 切换显示
+  ensureCopyAsMenu();
+  if (!copyAsMenuEl.classList.contains('hidden')) { hideCopyAsMenu(); return; }
+  showCopyAsMenu(x, y);
 });
 
 listen('session:status', (ev) => {
