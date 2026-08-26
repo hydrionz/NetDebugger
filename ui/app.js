@@ -579,6 +579,7 @@ function ensureMsgMenu() {
       </div>
     </div>
     <div class="context-menu-item" data-msg-ctx="diff"><span class="ctx-icon">◨</span><span class="ctx-label" id="msg-diff-label">对比...</span></div>
+    <div class="context-menu-item" data-msg-ctx="batch"><span class="ctx-icon">⚡</span><span class="ctx-label">批量发送...</span></div>
     <div class="context-menu-separator"></div>
     <div class="context-menu-item" data-msg-ctx="delete"><span class="ctx-icon">×</span><span class="ctx-label">删除</span></div>
   `;
@@ -599,6 +600,8 @@ function ensureMsgMenu() {
       copyMessageAs(messageId, ctx.slice(5));
     } else if (ctx === 'diff') {
       handleDiffSelection(messageId);
+    } else if (ctx === 'batch') {
+      openBatchDialog(messageId);
     }
   });
 
@@ -716,6 +719,109 @@ document.getElementById('dlg-diff')?.addEventListener('click', (e) => {
   if (e.target.id === 'dlg-diff') closeDiffDialog();
 });
 
+// ===== 批量/压测发送 =====
+let batchAbort = false;
+let batchRunning = false;
+
+function openBatchDialog(messageId) {
+  const id = state.selectedSessionId;
+  if (!id) return;
+  const msgs = state.messages.get(id) || [];
+  const m = msgs.find((x) => x.id === messageId);
+  if (!m || m.payload_type === 'notice') return;
+  const s = findSession(id);
+  if (s && s.status !== 'running') { showError('连接未运行'); return; }
+  const dlg = document.getElementById('dlg-batch');
+  if (!dlg) return;
+  dlg.dataset.messageId = messageId;
+  const preview = document.getElementById('batch-preview');
+  if (preview) {
+    const text = m.payload_type === 'binary' ? bytesToHex(m.payload) : bytesToText(m.payload);
+    preview.textContent = text.length > 500 ? text.slice(0, 500) + '…' : text;
+  }
+  const countEl = document.getElementById('batch-count');
+  const intervalEl = document.getElementById('batch-interval');
+  const prog = document.getElementById('batch-progress');
+  if (prog) { prog.style.display = 'none'; prog.textContent = ''; }
+  const btnStart = document.getElementById('btn-batch-start');
+  const btnStop = document.getElementById('btn-batch-stop');
+  const btnCancel = document.getElementById('btn-batch-cancel');
+  if (btnStart) btnStart.classList.remove('hidden');
+  if (btnStop) btnStop.classList.add('hidden');
+  if (btnCancel) btnCancel.classList.remove('hidden');
+  batchAbort = false;
+  batchRunning = false;
+  dlg.showModal();
+}
+
+async function startBatchSend() {
+  const dlg = document.getElementById('dlg-batch');
+  const id = state.selectedSessionId;
+  if (!dlg || !id) return;
+  const messageId = dlg.dataset.messageId;
+  const msgs = state.messages.get(id) || [];
+  const m = msgs.find((x) => x.id === messageId);
+  if (!m) { showError('消息不存在'); return; }
+  const count = Math.max(1, Math.min(100000, parseInt(document.getElementById('batch-count').value, 10) || 0));
+  const interval = Math.max(0, parseInt(document.getElementById('batch-interval').value, 10) || 0);
+  if (!count) { showError('次数不能为空'); return; }
+  const s = findSession(id);
+  if (!s || s.status !== 'running') { showError('连接未运行'); return; }
+  // snapshot target
+  let clientId = null, endpoint = null;
+  if (s.role === 'server') {
+    const v = els.sendTarget.value;
+    if (v && v !== 'all') {
+      if (v.startsWith('ep:')) endpoint = v.slice(3);
+      else clientId = v;
+    }
+    if (!clientId && (state.clients.get(id) || []).length === 0) { showError('服务端无客户端'); return; }
+  }
+  const btnStart = document.getElementById('btn-batch-start');
+  const btnStop = document.getElementById('btn-batch-stop');
+  const btnCancel = document.getElementById('btn-batch-cancel');
+  const prog = document.getElementById('batch-progress');
+  batchRunning = true;
+  batchAbort = false;
+  if (btnStart) btnStart.classList.add('hidden');
+  if (btnCancel) btnCancel.classList.add('hidden');
+  if (btnStop) btnStop.classList.remove('hidden');
+  if (prog) { prog.style.display = 'block'; prog.textContent = `发送中 0/${count}`; }
+  for (let i = 0; i < count; i++) {
+    if (batchAbort) break;
+    const cur = findSession(id);
+    if (!cur || cur.status !== 'running') { showError('连接已断开，已停止'); break; }
+    try {
+      await invoke('send_message', { sessionId: id, payload: Array.from(m.payload), payloadType: m.payload_type, clientId, endpoint });
+    } catch (e) {
+      showError('批量发送第 ' + (i + 1) + ' 条失败: ' + e);
+      // continue to next
+    }
+    if (prog) prog.textContent = `发送中 ${i + 1}/${count}`;
+    if (interval > 0 && i < count - 1) {
+      await new Promise((r) => setTimeout(r, interval));
+      if (batchAbort) break;
+    }
+  }
+  batchRunning = false;
+  if (prog) prog.textContent = batchAbort ? `已停止` : `已完成 ${count} 次`;
+  showToast(batchAbort ? '批量发送已停止' : `批量发送完成 ${count} 次`);
+  setTimeout(() => {
+    if (dlg.open) dlg.close();
+  }, 400);
+}
+
+function stopBatchSend() {
+  batchAbort = true;
+  const prog = document.getElementById('batch-progress');
+  if (prog) prog.textContent = '正在停止...';
+}
+
+document.getElementById('btn-batch-start')?.addEventListener('click', (e) => { e.preventDefault(); startBatchSend(); });
+document.getElementById('btn-batch-stop')?.addEventListener('click', (e) => { e.preventDefault(); stopBatchSend(); });
+document.getElementById('btn-batch-cancel')?.addEventListener('click', (e) => { e.preventDefault(); if (batchRunning) stopBatchSend(); document.getElementById('dlg-batch')?.close(); });
+document.getElementById('dlg-batch')?.addEventListener('close', () => { if (batchRunning) batchAbort = true; });
+
 function showMsgMenu(x, y, messageId) {
   ensureMsgMenu();
   if (typeof hideCopyAsMenu === 'function') hideCopyAsMenu();
@@ -736,6 +842,8 @@ function showMsgMenu(x, y, messageId) {
     }
     diffItem.classList.toggle('disabled', !m || m.payload_type === 'notice');
   }
+  const batchItem = msgMenuEl.querySelector('[data-msg-ctx="batch"]');
+  if (batchItem) batchItem.classList.toggle('disabled', !m || m.payload_type === 'notice');
   msgMenuEl.classList.remove('hidden');
   msgMenuEl.style.left = x + 'px';
   msgMenuEl.style.top = y + 'px';

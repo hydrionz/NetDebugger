@@ -237,7 +237,8 @@ async fn run_client_socket_loop<S>(
 ) where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
-    let (mut write, mut read) = ws_stream.split();
+    let (write_half, mut read) = ws_stream.split();
+    let write = Arc::new(tokio::sync::Mutex::new(write_half));
     let remote_addr_ref = remote_addr.as_str();
 
     loop {
@@ -246,7 +247,7 @@ async fn run_client_socket_loop<S>(
                 match msg {
                     Some(Ok(WsMessage::Text(text))) => {
                         persist_in_message(&db, &session_id, Some(&client_id), "text", text.as_bytes().to_vec(), Some(&endpoint), Some(remote_addr_ref), &handle).await;
-                        // 自动回复：动态读取最新规则，命中首条即回复
+                        // 自动回复：动态读取最新规则，命中首条即回复；spawn 独立任务避免阻塞接收
                         let compiled: Vec<(crate::db::AutoReplyRule, Option<regex::Regex>)> = {
                             let guard = handle.auto_replies.lock().await;
                             guard.clone().unwrap_or_default().into_iter().filter(|r| r.enabled).map(|r| {
@@ -256,14 +257,24 @@ async fn run_client_socket_loop<S>(
                         };
                         if !compiled.is_empty() {
                             if let Some((reply_bytes, is_text, delay_ms)) = match_auto_reply(&text, &compiled) {
-                                if delay_ms > 0 { tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await; }
-                                let ts = chrono::Utc::now().timestamp_millis();
-                                persist_auto_reply_pair(&db, &handle, &session_id, &client_id, &endpoint, remote_addr_ref, reply_bytes.clone(), is_text, ts).await;
-                                let _ = if is_text {
-                                    write.send(WsMessage::Text(String::from_utf8_lossy(&reply_bytes).into_owned().into())).await
-                                } else {
-                                    write.send(WsMessage::Binary(reply_bytes.into())).await
-                                };
+                                let db_c = db.clone();
+                                let handle_c = handle.clone();
+                                let session_id_c = session_id.clone();
+                                let client_id_c = client_id.clone();
+                                let endpoint_c = endpoint.clone();
+                                let remote_addr_c = remote_addr.clone();
+                                let write_c = write.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    if delay_ms > 0 { tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await; }
+                                    let ts = chrono::Utc::now().timestamp_millis();
+                                    persist_auto_reply_pair(&db_c, &handle_c, &session_id_c, &client_id_c, &endpoint_c, &remote_addr_c, reply_bytes.clone(), is_text, ts).await;
+                                    let mut w = write_c.lock().await;
+                                    let _ = if is_text {
+                                        w.send(WsMessage::Text(String::from_utf8_lossy(&reply_bytes).into_owned().into())).await
+                                    } else {
+                                        w.send(WsMessage::Binary(reply_bytes.into())).await
+                                    };
+                                });
                             }
                         }
                     }
@@ -279,14 +290,24 @@ async fn run_client_socket_loop<S>(
                         if !compiled.is_empty() {
                             let txt = String::from_utf8_lossy(&bin).into_owned();
                             if let Some((reply_bytes, is_text, delay_ms)) = match_auto_reply(&txt, &compiled) {
-                                if delay_ms > 0 { tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await; }
-                                let ts = chrono::Utc::now().timestamp_millis();
-                                persist_auto_reply_pair(&db, &handle, &session_id, &client_id, &endpoint, remote_addr_ref, reply_bytes.clone(), is_text, ts).await;
-                                let _ = if is_text {
-                                    write.send(WsMessage::Text(String::from_utf8_lossy(&reply_bytes).into_owned().into())).await
-                                } else {
-                                    write.send(WsMessage::Binary(reply_bytes.into())).await
-                                };
+                                let db_c = db.clone();
+                                let handle_c = handle.clone();
+                                let session_id_c = session_id.clone();
+                                let client_id_c = client_id.clone();
+                                let endpoint_c = endpoint.clone();
+                                let remote_addr_c = remote_addr.clone();
+                                let write_c = write.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    if delay_ms > 0 { tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await; }
+                                    let ts = chrono::Utc::now().timestamp_millis();
+                                    persist_auto_reply_pair(&db_c, &handle_c, &session_id_c, &client_id_c, &endpoint_c, &remote_addr_c, reply_bytes.clone(), is_text, ts).await;
+                                    let mut w = write_c.lock().await;
+                                    let _ = if is_text {
+                                        w.send(WsMessage::Text(String::from_utf8_lossy(&reply_bytes).into_owned().into())).await
+                                    } else {
+                                        w.send(WsMessage::Binary(reply_bytes.into())).await
+                                    };
+                                });
                             }
                         }
                     }
@@ -320,17 +341,20 @@ async fn run_client_socket_loop<S>(
                 // or the broadcast arm above for "send to all") — this loop only
                 // writes to the socket, so a broadcast doesn't get persisted once
                 // per connected client.
-                let result = match out {
-                    Some(ClientMessage::Text(text)) => {
-                        write.send(WsMessage::Text(text.into())).await
+                let result = {
+                    let mut w = write.lock().await;
+                    match out {
+                        Some(ClientMessage::Text(text)) => {
+                            w.send(WsMessage::Text(text.into())).await
+                        }
+                        Some(ClientMessage::Binary(bin)) => {
+                            w.send(WsMessage::Binary(bin.into())).await
+                        }
+                        Some(ClientMessage::Ping) => {
+                            w.send(WsMessage::Ping(Vec::new().into())).await
+                        }
+                        None => break,
                     }
-                    Some(ClientMessage::Binary(bin)) => {
-                        write.send(WsMessage::Binary(bin.into())).await
-                    }
-                    Some(ClientMessage::Ping) => {
-                        write.send(WsMessage::Ping(Vec::new().into())).await
-                    }
-                    None => break,
                 };
                 if let Err(e) = result {
                     eprintln!("ws write error: {}", e);

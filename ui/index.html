@@ -495,6 +495,21 @@
     </div>
   </dialog>
 
+  <dialog id="dlg-batch" class="app-dialog" style="min-width:380px">
+    <div class="app-dialog-body">
+      <div style="font-weight:600; margin-bottom:8px">批量 / 压测发送</div>
+      <div id="batch-preview" style="font-size:11px; color:var(--text-muted); max-height:80px; overflow:auto; border:1px solid var(--border); padding:6px; border-radius:4px; background:var(--bg); white-space:pre-wrap; word-break:break-all; margin-bottom:10px"></div>
+      <label style="display:block; margin-bottom:8px">次数 <input type="number" id="batch-count" value="10" min="1" max="100000" style="width:100%; margin-top:4px" /></label>
+      <label style="display:block; margin-bottom:8px">间隔 (ms) <input type="number" id="batch-interval" value="100" min="0" style="width:100%; margin-top:4px" /></label>
+      <div id="batch-progress" style="font-size:11px; color:var(--text-muted); display:none; margin-bottom:4px"></div>
+      <div class="dialog-actions">
+        <button id="btn-batch-cancel">取消</button>
+        <button id="btn-batch-start" class="primary">开始</button>
+        <button id="btn-batch-stop" class="danger hidden">停止</button>
+      </div>
+    </div>
+  </dialog>
+
   <div id="toast-container" class="toast-container hidden"></div>
 
   <script src="app.js"></script>
