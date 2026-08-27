@@ -2209,10 +2209,10 @@ function updateSendArea() {
   if (!s) return;
 
   const isConnected = s.status === 'running';
-  els.sendInput.disabled = !isConnected;
+  els.sendInput.disabled = false;
   els.sendTarget.disabled = !isConnected;
   const noClient = s.role === 'server' && (state.clients.get(id) || []).length === 0;
-  document.getElementById('btn-send').disabled = !isConnected || noClient;
+  document.getElementById('btn-send').disabled = !isConnected;
   document.getElementById('btn-send-ping').disabled = !isConnected || noClient;
   if (!isConnected) document.getElementById('heartbeat-status')?.classList.add('hidden');
 
