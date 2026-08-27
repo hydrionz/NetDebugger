@@ -401,6 +401,27 @@ pub async fn delete_message(state: State<'_ , AppState>, message_id: String) -> 
 }
 
 #[tauri::command]
+pub async fn set_message_pinned(state: State<'_ , AppState>, message_id: String, pinned: bool) -> Result<(), String> {
+    db::set_message_pinned(&state.db, &message_id, pinned)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn load_pinned_messages(state: State<'_ , AppState>, session_id: String) -> Result<Vec<db::Message>, String> {
+    db::load_pinned_messages(&state.db, &session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_message_by_id(state: State<'_ , AppState>, message_id: String) -> Result<Option<db::Message>, String> {
+    db::get_message_by_id(&state.db, &message_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn start_session(
     app: AppHandle,
     state: State<'_ , AppState>,

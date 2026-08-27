@@ -709,6 +709,28 @@ body.resizing-h {
   outline-offset: 1px;
 }
 
+.message.pinned {
+  border-color: var(--warning);
+}
+
+.pinned-section {
+  border: 1px solid var(--warning);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 6px;
+  margin-bottom: 10px;
+}
+
+.pinned-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--warning);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .message.in {
   align-self: flex-start;
   border-left: 4px solid var(--accent);
@@ -1971,7 +1993,8 @@ dialog select {
 }
 
 .message-body mark,
-#detail-body mark {
+#detail-body mark,
+#preview-body mark {
   background: #ffe066;
   color: #1a1a1a;
   padding: 0 1px;
@@ -1979,7 +2002,8 @@ dialog select {
 }
 
 :root[data-theme="dark"] .message-body mark,
-:root[data-theme="dark"] #detail-body mark {
+:root[data-theme="dark"] #detail-body mark,
+:root[data-theme="dark"] #preview-body mark {
   background: #8a6d00;
   color: #ffffff;
 }

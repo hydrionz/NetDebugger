@@ -102,6 +102,11 @@
                 <path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 4-6"/>
               </svg>
             </button>
+            <button id="btn-favorites" class="icon-btn" data-tip="已收藏" aria-label="已收藏">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </button>
             <div class="spacer"></div>
             <button id="btn-truncate-toggle" class="icon-btn truncate-toggle" type="button" data-tip="长消息截断显示（点击切换）" aria-label="长消息截断" aria-pressed="true">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -522,6 +527,39 @@
         <button id="btn-batch-cancel">取消</button>
         <button id="btn-batch-start" class="primary">开始</button>
         <button id="btn-batch-stop" class="danger hidden">停止</button>
+      </div>
+    </div>
+  </dialog>
+
+   <dialog id="dlg-favorites" class="app-dialog" style="width:560px; max-width:95vw; height:480px; max-height:80vh; max-width:none">
+    <div class="app-dialog-body" style="height:100%; display:flex; flex-direction:column; min-height:0">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+        <span style="font-weight:600">已收藏</span>
+        <button id="btn-favorites-close" class="copy-btn" aria-label="关闭" style="font-size:14px">✕</button>
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:8px">
+        <input id="favorites-search" type="text" placeholder="搜索收藏 — 内容 / 端点 / 方向" style="flex:1; padding:6px 8px; border:1px solid var(--border); border-radius:4px; background:var(--surface); color:var(--text); font-size:12px" />
+        <button id="btn-favorites-clear-search" class="copy-btn" style="flex-shrink:0; padding:6px 10px; font-size:12px" data-tip="清空搜索" aria-label="清空搜索">✕</button>
+      </div>
+      <div id="favorites-list" style="flex:1; overflow:auto; border:1px solid var(--border); border-radius:4px; background:var(--surface); min-height:0"></div>
+      <div id="favorites-empty" style="text-align:center; color:var(--text-muted); font-size:12px; padding:12px; display:none">暂无收藏</div>
+      <div id="favorites-no-match" style="text-align:center; color:var(--text-muted); font-size:12px; padding:12px; display:none">无匹配结果</div>
+      <div class="dialog-actions">
+        <button id="btn-favorites-close2">关闭</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-favorite-preview" class="app-dialog" style="width:560px; max-width:95vw; height:400px; max-height:80vh; max-width:none">
+    <div class="app-dialog-body" style="height:100%; display:flex; flex-direction:column; min-height:0">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+        <span style="font-weight:600">收藏预览</span>
+        <button id="btn-preview-close" class="copy-btn" aria-label="关闭" style="font-size:14px">✕</button>
+      </div>
+      <div id="preview-meta" style="font-size:11px; color:var(--text-muted); margin-bottom:6px"></div>
+      <pre id="preview-body" style="flex:1; overflow:auto; border:1px solid var(--border); border-radius:4px; padding:8px; background:var(--surface); white-space:pre-wrap; word-break:break-all; font-family:monospace; font-size:12px; min-height:0"></pre>
+      <div class="dialog-actions">
+        <button id="btn-preview-close2">关闭</button>
       </div>
     </div>
   </dialog>

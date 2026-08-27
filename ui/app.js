@@ -582,6 +582,7 @@ function ensureMsgMenu() {
     </div>
     <div class="context-menu-item" data-msg-ctx="diff"><span class="ctx-icon">◨</span><span class="ctx-label" id="msg-diff-label">对比...</span></div>
     <div class="context-menu-item" data-msg-ctx="batch"><span class="ctx-icon">⚡</span><span class="ctx-label">批量发送...</span></div>
+    <div class="context-menu-item" data-msg-ctx="pin"><span class="ctx-icon">★</span><span class="ctx-label" id="msg-pin-label">收藏</span></div>
     <div class="context-menu-separator"></div>
     <div class="context-menu-item" data-msg-ctx="delete"><span class="ctx-icon">×</span><span class="ctx-label">删除</span></div>
   `;
@@ -604,6 +605,8 @@ function ensureMsgMenu() {
       handleDiffSelection(messageId);
     } else if (ctx === 'batch') {
       openBatchDialog(messageId);
+    } else if (ctx === 'pin') {
+      togglePin(messageId);
     }
   });
 
@@ -651,6 +654,168 @@ function handleDiffSelection(messageId) {
     renderTimeline();
     openDiffDialog(a, b);
   }
+}
+
+async function togglePin(messageId) {
+  const id = state.selectedSessionId;
+  if (!id) return;
+  const msgs = state.messages.get(id) || [];
+  let m = msgs.find((x) => x.id === messageId);
+  // 收藏列表按 DB 全量展示，时间线可能未加载该消息，此时 m 可能不存在，需兜底查询
+  let next;
+  if (m) {
+    if (m.payload_type === 'notice') return;
+    next = !m.pinned;
+  } else {
+    try {
+      const fetched = await invoke('get_message_by_id', { messageId });
+      if (!fetched || fetched.payload_type === 'notice') return;
+      next = !fetched.pinned;
+    } catch { return; }
+  }
+  try {
+    await invoke('set_message_pinned', { messageId, pinned: next });
+    if (m) m.pinned = next ? 1 : 0;
+    else {
+      // 若内存中没有，尝试按需插入以保持时间线 ★ 角标一致（失败也不阻塞）
+      try {
+        const fetched = await invoke('get_message_by_id', { messageId });
+        if (fetched) {
+          const arr = state.messages.get(id) || [];
+          // 按时间戳插入保持有序
+          let idx = arr.findIndex(x => x.timestamp > fetched.timestamp);
+          if (idx === -1) arr.push(fetched); else arr.splice(idx, 0, fetched);
+          state.messages.set(id, arr);
+        }
+      } catch {}
+      if (next === false) {
+        // 取消收藏：若已插入则更新 pinned
+        const arr = state.messages.get(id) || [];
+        const nm = arr.find(x => x.id === messageId);
+        if (nm) nm.pinned = 0;
+      }
+    }
+    showToast(next ? '已收藏' : '已取消收藏');
+    renderTimeline();
+    renderDetail();
+    // 刷新收藏弹窗（DB 全量）
+    if (document.getElementById('dlg-favorites')?.open) await renderFavorites();
+  } catch (e) {
+    showError('收藏失败: ' + e);
+  }
+}
+
+async function renderFavorites() {
+  const list = document.getElementById('favorites-list');
+  const empty = document.getElementById('favorites-empty');
+  const noMatch = document.getElementById('favorites-no-match');
+  if (!list) return;
+  const id = state.selectedSessionId;
+  let all = [];
+  try {
+    all = await invoke('load_pinned_messages', { sessionId: id });
+  } catch {
+    // 降级：内存过滤（兼容旧逻辑）
+    all = (state.messages.get(id) || []).filter(m => m.pinned && m.payload_type !== 'notice');
+  }
+  const rawQ = (document.getElementById('favorites-search')?.value || '').trim();
+  const q = rawQ.toLowerCase();
+  let msgs = all;
+  if (q) {
+    msgs = all.filter(m => {
+      const text = msgDisplayText(m).toLowerCase();
+      const ep = (m.endpoint || '').toLowerCase();
+      const dir = m.direction === 'in' ? 'in 接收 ↓' : 'out 发送 ↑';
+      return text.includes(q) || ep.toLowerCase().includes(q) || dir.includes(q);
+    });
+  }
+  list.innerHTML = '';
+  if (empty) empty.style.display = all.length ? 'none' : 'block';
+  if (noMatch) noMatch.style.display = all.length && !msgs.length ? 'block' : 'none';
+  if (!all.length) { return; }
+  if (!msgs.length) { return; }
+  for (const m of msgs) {
+    const item = document.createElement('div');
+    item.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px; border-bottom:1px solid var(--border)';
+    const preview = msgDisplayText(m);
+    const short = preview.length > 80 ? preview.slice(0, 80) + '…' : preview;
+    const shortHtml = rawQ ? highlightText(short, rawQ) : escapeHtml(short);
+    item.innerHTML = `
+      <div class="fav-main" style="flex:1; min-width:0; cursor:pointer">
+        <div style="font-size:11px; color:var(--text-muted)">${formatTime(m.timestamp)} · ${m.direction === 'in' ? '↓' : '↑'} ${escapeHtml(m.endpoint || '—')} · ${m.size} B</div>
+        <div style="font-family:monospace; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${shortHtml}</div>
+      </div>
+      <div style="display:flex; gap:4px; flex-shrink:0">
+        <button class="icon-btn" data-tip="定位到消息位置" aria-label="定位" data-locate="${m.id}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
+        <button class="icon-btn" data-tip="取消收藏" aria-label="取消收藏" data-unfav="${m.id}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+      </div>
+    `;
+    item.querySelector('.fav-main').addEventListener('click', () => openFavoritePreview(m.id));
+    item.querySelector('[data-locate]').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      document.getElementById('dlg-favorites')?.close();
+      // 若时间线未加载该收藏消息，需先从 DB 拉回并插入内存，否则 scrollIntoView 找不到元素
+      let inMem = (state.messages.get(id) || []).some(x => x.id === m.id);
+      if (!inMem) {
+        try {
+          const fetched = await invoke('get_message_by_id', { messageId: m.id });
+          if (fetched) {
+            const arr = state.messages.get(id) || [];
+            let idx = arr.findIndex(x => x.timestamp > fetched.timestamp);
+            if (idx === -1) arr.push(fetched); else arr.splice(idx, 0, fetched);
+            state.messages.set(id, arr);
+          }
+        } catch {}
+      }
+      state.selectedMessageId = m.id;
+      renderTimeline();
+      renderDetail();
+      setTimeout(() => {
+        const el = els.timeline.querySelector(`.message[data-id="${CSS.escape(m.id)}"]`);
+        if (el) el.scrollIntoView({ block: 'center' });
+      }, 50);
+    });
+    item.querySelector('[data-unfav]').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!await showConfirm('确定取消收藏？')) return;
+      await togglePin(m.id);
+    });
+    list.appendChild(item);
+  }
+}
+
+async function openFavoritesDialog() {
+  const id = state.selectedSessionId;
+  if (!id) { showError('请先选择会话'); return; }
+  await renderFavorites();
+  document.getElementById('dlg-favorites')?.showModal();
+}
+
+async function openFavoritePreview(messageId) {
+  const id = state.selectedSessionId;
+  let m = (state.messages.get(id) || []).find(x => x.id === messageId);
+  if (!m) {
+    try { m = await invoke('get_message_by_id', { messageId }); } catch {}
+  }
+  if (!m) { showError('消息不存在'); return; }
+  const dlg = document.getElementById('dlg-favorite-preview');
+  if (!dlg) return;
+  dlg.dataset.messageId = messageId;
+  const meta = document.getElementById('preview-meta');
+  const body = document.getElementById('preview-body');
+  if (meta) meta.textContent = `${m.direction === 'in' ? '↓ 接收' : '↑ 发送'} · ${formatTime(m.timestamp)} · ${m.endpoint || '—'} · ${m.payload_type} · ${formatBytes(m.payload)}`;
+  if (body) {
+    const rawQ = (document.getElementById('favorites-search')?.value || '').trim();
+    let content;
+    if (m.payload_type === 'binary') content = bytesToHex(m.payload);
+    else {
+      const txt = bytesToText(m.payload);
+      try { const p = JSON.parse(txt); if (p !== null && typeof p === 'object') content = JSON.stringify(p, null, 2); else content = txt; } catch { content = txt; }
+    }
+    if (rawQ) body.innerHTML = highlightText(content, rawQ);
+    else body.textContent = content;
+  }
+  dlg.showModal();
 }
 
 function openDiffDialog(aId, bId) {
@@ -824,6 +989,17 @@ document.getElementById('btn-batch-stop')?.addEventListener('click', (e) => { e.
 document.getElementById('btn-batch-cancel')?.addEventListener('click', (e) => { e.preventDefault(); if (batchRunning) stopBatchSend(); document.getElementById('dlg-batch')?.close(); });
 document.getElementById('dlg-batch')?.addEventListener('close', () => { if (batchRunning) batchAbort = true; });
 
+document.getElementById('btn-favorites')?.addEventListener('click', (e) => { e.preventDefault(); openFavoritesDialog(); });
+document.getElementById('btn-favorites-close')?.addEventListener('click', () => document.getElementById('dlg-favorites')?.close());
+document.getElementById('btn-favorites-close2')?.addEventListener('click', () => document.getElementById('dlg-favorites')?.close());
+document.getElementById('dlg-favorites')?.addEventListener('click', (e) => { if (e.target.id === 'dlg-favorites') e.target.close(); });
+document.getElementById('favorites-search')?.addEventListener('input', () => renderFavorites());
+document.getElementById('btn-favorites-clear-search')?.addEventListener('click', (e) => { e.preventDefault(); const inp = document.getElementById('favorites-search'); if (inp) { inp.value = ''; inp.focus(); } renderFavorites(); });
+
+document.getElementById('btn-preview-close')?.addEventListener('click', () => document.getElementById('dlg-favorite-preview')?.close());
+document.getElementById('btn-preview-close2')?.addEventListener('click', () => document.getElementById('dlg-favorite-preview')?.close());
+document.getElementById('dlg-favorite-preview')?.addEventListener('click', (e) => { if (e.target.id === 'dlg-favorite-preview') e.target.close(); });
+
 function showMsgMenu(x, y, messageId) {
   ensureMsgMenu();
   if (typeof hideCopyAsMenu === 'function') hideCopyAsMenu();
@@ -846,6 +1022,12 @@ function showMsgMenu(x, y, messageId) {
   }
   const batchItem = msgMenuEl.querySelector('[data-msg-ctx="batch"]');
   if (batchItem) batchItem.classList.toggle('disabled', !m || m.payload_type === 'notice');
+  const pinItem = msgMenuEl.querySelector('[data-msg-ctx="pin"]');
+  if (pinItem) {
+    const label = pinItem.querySelector('#msg-pin-label');
+    if (label) label.textContent = m && m.pinned ? '取消收藏' : '收藏';
+    pinItem.classList.toggle('disabled', !m || m.payload_type === 'notice');
+  }
   msgMenuEl.classList.remove('hidden');
   msgMenuEl.style.left = x + 'px';
   msgMenuEl.style.top = y + 'px';
@@ -909,6 +1091,10 @@ document.body.appendChild(tipEl);
 function showTooltip(target) {
   const text = target.dataset.tip;
   if (!text) return;
+  // dialog 为顶层 top-layer，body 里的 fixed 会被遮挡，需把 tip 移入当前 dialog 才能即时可见
+  const dlg = target.closest('dialog[open]');
+  if (dlg && tipEl.parentElement !== dlg) dlg.appendChild(tipEl);
+  else if (!dlg && tipEl.parentElement !== document.body) document.body.appendChild(tipEl);
   tipEl.textContent = text;
   tipEl.classList.remove('hidden');
   const rect = target.getBoundingClientRect();
@@ -1662,11 +1848,12 @@ function renderTimeline() {
       continue;
     }
     const el = document.createElement('div');
-    el.className = 'message ' + m.direction + (m.id === state.selectedMessageId ? ' selected' : '') + (m.id === state.diffBaseId ? ' diff-base' : '');
+    el.className = 'message ' + m.direction + (m.id === state.selectedMessageId ? ' selected' : '') + (m.id === state.diffBaseId ? ' diff-base' : '') + (m.pinned ? ' pinned' : '');
     el.dataset.id = m.id;
     const text = msgDisplayText(m);
     const epBadge = m.endpoint ? `<span class="msg-endpoint">${escapeHtml(m.endpoint)}</span>` : '';
     const sender = m.direction === 'in' ? getSenderLabel(id, m) : '';
+    const favBadge = m.pinned ? `<span class="msg-hit-count" style="background:var(--warning-soft); color:#b58900; border-color:#e6a700" data-tip="已收藏">★</span>` : '';
     const diffBadge = m.id === state.diffBaseId ? `<span class="msg-hit-count" style="background:var(--selected-bg); color:var(--accent); border-color:var(--accent)">基准</span>` : '';
     const matchCount = hitCountById.get(m.id) || 0;
     const hitBadge = matchCount > 1
@@ -1702,6 +1889,7 @@ function renderTimeline() {
         <span class="msg-type ${m.payload_type === 'binary' ? 'binary' : 'txt'}">${m.payload_type === 'binary' ? 'BIN' : 'TXT'}</span>
         ${epBadge}
         ${sender}
+        ${favBadge}
         ${diffBadge}
         ${hitBadge}
       </div>
@@ -2111,14 +2299,19 @@ async function clearMessages() {
   if (!await showConfirm('确定清空当前会话的消息记录？')) return;
   try {
     await invoke('clear_messages', { sessionId: id });
-    state.messages.set(id, []);
-    state.diffBaseId = null;
+    // 固定消息保留
+    const kept = (state.messages.get(id) || []).filter(m => m.pinned);
+    state.messages.set(id, kept);
+    if (!kept.some(m => m.id === state.selectedMessageId)) {
+      state.selectedMessageId = null;
+      renderDetail();
+    }
+    if (!kept.some(m => m.id === state.diffBaseId)) state.diffBaseId = null;
     state.statsPeak.delete(id);
     state.statsWindows.delete(id);
     state.unreadCounts.delete(id);
     renderProjectTree();
     renderTimeline();
-    renderDetail();
   } catch (e) {
     showError('清空失败: ' + e);
   }

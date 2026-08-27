@@ -54,6 +54,8 @@ pub enum TimelineEvent {
         payload: Vec<u8>,
         size: usize,
         timestamp: i64,
+        #[serde(default)]
+        pinned: i64,
     },
     Status {
         session_id: String,

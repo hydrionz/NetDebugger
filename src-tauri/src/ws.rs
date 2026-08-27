@@ -713,6 +713,7 @@ async fn persist_in_message(
         timestamp: chrono::Utc::now().timestamp_millis(),
         endpoint: endpoint.map(|s| s.to_string()),
         sender: sender.map(|s| s.to_string()),
+        pinned: 0,
     };
     db::insert_message(db, &msg).await.ok();
     let event = TimelineEvent::Message {
@@ -726,6 +727,7 @@ async fn persist_in_message(
         payload: payload.clone(),
         size: msg.size,
         timestamp: msg.timestamp,
+        pinned: 0,
     };
     send_timeline_event(handle, event.clone()).await;
     let _ = handle.app.emit("session:message", event);
@@ -752,6 +754,7 @@ pub(crate) async fn persist_out_message(
         timestamp: chrono::Utc::now().timestamp_millis(),
         endpoint: endpoint.map(|s| s.to_string()),
         sender: None,
+        pinned: 0,
     };
     db::insert_message(db, &msg).await.ok();
     let event = TimelineEvent::Message {
@@ -765,6 +768,7 @@ pub(crate) async fn persist_out_message(
         payload: payload.clone(),
         size: msg.size,
         timestamp: msg.timestamp,
+        pinned: 0,
     };
     send_timeline_event(handle, event.clone()).await;
     let _ = handle.app.emit("session:message", event);
@@ -802,6 +806,7 @@ async fn persist_notice(
         timestamp,
         endpoint: None,
         sender: None,
+        pinned: 0,
     };
     if let Err(e) = db::insert_message(db, &msg).await {
         eprintln!("insert notice error: {}", e);
@@ -838,6 +843,7 @@ async fn persist_auto_reply_pair(
         timestamp: ts,
         endpoint: None,
         sender: None,
+        pinned: 0,
     };
     let _ = db::insert_message(db, &notice_msg).await;
     send_timeline_event(handle, TimelineEvent::Notice {
@@ -860,6 +866,7 @@ async fn persist_auto_reply_pair(
         timestamp: ts,
         endpoint: Some(endpoint.to_string()),
         sender: None,
+        pinned: 0,
     };
     let _ = db::insert_message(db, &out_msg).await;
     let event = TimelineEvent::Message {
@@ -873,6 +880,7 @@ async fn persist_auto_reply_pair(
         payload: reply_bytes.clone(),
         size,
         timestamp: ts,
+        pinned: 0,
     };
     send_timeline_event(handle, event.clone()).await;
     let _ = handle.app.emit("session:message", event);

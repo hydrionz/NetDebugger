@@ -76,6 +76,8 @@ pub struct Message {
     pub timestamp: i64,
     pub endpoint: Option<String>,
     pub sender: Option<String>,
+    #[serde(default)]
+    pub pinned: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,6 +98,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/009_auto_reconnect.sql"),
     include_str!("../migrations/010_heartbeat.sql"),
     include_str!("../migrations/011_auto_replies.sql"),
+    include_str!("../migrations/012_pinned.sql"),
 ];
 
 pub async fn open_db(path: &str) -> Result<Connection> {
@@ -611,8 +614,8 @@ pub async fn insert_message(conn: &Connection, msg: &Message) -> Result<()> {
     let msg = msg.clone();
     conn.call(move |conn| {
         conn.execute(
-            "INSERT INTO messages (id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO messages (id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender, pinned) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 &msg.id,
                 &msg.session_id,
@@ -624,6 +627,7 @@ pub async fn insert_message(conn: &Connection, msg: &Message) -> Result<()> {
                 &msg.timestamp.to_string(),
                 &msg.endpoint,
                 &msg.sender,
+                &msg.pinned,
             ],
         )?;
         Ok(())
@@ -642,7 +646,7 @@ pub async fn load_messages(
     conn.call(move |conn| {
         let messages = if let Some(before) = before {
             conn.prepare(
-                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender \
+                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender, pinned \
                  FROM messages WHERE session_id = ?1 AND timestamp < ?2 ORDER BY timestamp DESC LIMIT ?3",
             )?
             .query_map(params![
@@ -659,12 +663,13 @@ pub async fn load_messages(
                     timestamp: row.get(7)?,
                     endpoint: row.get(8)?,
                     sender: row.get(9)?,
+                    pinned: row.get(10)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?
         } else {
             conn.prepare(
-                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender \
+                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender, pinned \
                  FROM messages WHERE session_id = ?1 ORDER BY timestamp DESC LIMIT ?2",
             )?
             .query_map(params![
@@ -681,6 +686,7 @@ pub async fn load_messages(
                     timestamp: row.get(7)?,
                     endpoint: row.get(8)?,
                     sender: row.get(9)?,
+                    pinned: row.get(10)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?
@@ -694,7 +700,7 @@ pub async fn load_messages(
 pub async fn clear_messages(conn: &Connection, session_id: &str) -> Result<()> {
     let session_id = session_id.to_string();
     conn.call(move |conn| {
-        conn.execute("DELETE FROM messages WHERE session_id = ?1", params![
+        conn.execute("DELETE FROM messages WHERE session_id = ?1 AND pinned = 0", params![
             &session_id,
         ])?;
         Ok(())
@@ -703,13 +709,82 @@ pub async fn clear_messages(conn: &Connection, session_id: &str) -> Result<()> {
     .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("clear messages: {}", e))
 }
 
+pub async fn load_pinned_messages(conn: &Connection, session_id: &str) -> Result<Vec<Message>> {
+    let session_id = session_id.to_string();
+    conn.call(move |conn| {
+        let mut stmt = conn.prepare(
+            "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender, pinned \
+             FROM messages WHERE session_id = ?1 AND pinned = 1 AND payload_type != 'notice' ORDER BY timestamp",
+        )?;
+        let msgs = stmt
+            .query_map(params![&session_id], |row| {
+                Ok(Message {
+                    id: row.get(0)?,
+                    session_id: row.get(1)?,
+                    client_id: row.get(2)?,
+                    direction: row.get(3)?,
+                    payload_type: row.get(4)?,
+                    payload: row.get(5)?,
+                    size: row.get::<_, usize>(6)?,
+                    timestamp: row.get(7)?,
+                    endpoint: row.get(8)?,
+                    sender: row.get(9)?,
+                    pinned: row.get(10)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(msgs)
+    })
+    .await
+    .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("load pinned messages: {}", e))
+}
+
+pub async fn get_message_by_id(conn: &Connection, message_id: &str) -> Result<Option<Message>> {
+    let message_id = message_id.to_string();
+    conn.call(move |conn| {
+        let mut stmt = conn.prepare(
+            "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender, pinned \
+             FROM messages WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query_map(params![&message_id], |row| {
+            Ok(Message {
+                id: row.get(0)?,
+                session_id: row.get(1)?,
+                client_id: row.get(2)?,
+                direction: row.get(3)?,
+                payload_type: row.get(4)?,
+                payload: row.get(5)?,
+                size: row.get::<_, usize>(6)?,
+                timestamp: row.get(7)?,
+                endpoint: row.get(8)?,
+                sender: row.get(9)?,
+                pinned: row.get(10)?,
+            })
+        })?;
+        if let Some(r) = rows.next() { Ok(Some(r?)) } else { Ok(None) }
+    })
+    .await
+    .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("get message: {}", e))
+}
+
+pub async fn set_message_pinned(conn: &Connection, message_id: &str, pinned: bool) -> Result<()> {
+    let message_id = message_id.to_string();
+    let v: i64 = if pinned { 1 } else { 0 };
+    conn.call(move |conn| {
+        conn.execute("UPDATE messages SET pinned = ?1 WHERE id = ?2", params![&v, &message_id])?;
+        Ok(())
+    })
+    .await
+    .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("set pinned: {}", e))
+}
+
 /// 导出用：加载会话全部消息（按时间正序）。
 pub async fn load_all_messages(conn: &Connection, session_id: &str) -> Result<Vec<Message>> {
     let session_id = session_id.to_string();
     conn.call(move |conn| {
         let messages = conn
             .prepare(
-                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender \
+                "SELECT id, session_id, client_id, direction, payload_type, payload, size, timestamp, endpoint, sender, pinned \
                  FROM messages WHERE session_id = ?1 AND payload_type != 'notice' ORDER BY timestamp",
             )?
             .query_map(params![&session_id], |row| {
@@ -724,6 +799,7 @@ pub async fn load_all_messages(conn: &Connection, session_id: &str) -> Result<Ve
                     timestamp: row.get(7)?,
                     endpoint: row.get(8)?,
                     sender: row.get(9)?,
+                    pinned: row.get(10)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
