@@ -18,6 +18,7 @@ const state = {
   advancedFilter: { direction: 'all', payloadType: 'all', minSize: null, maxSize: null, useRegex: false, regexPattern: '', jsonPath: '' },
   truncateMessages: true,  // 长消息截断显示（工具栏"截断"切换，localStorage 持久化）
   sendKeyMode: 'enter',  // 'enter' = Enter 发送/Shift+Enter 换行；'ctrlEnter' = Ctrl+Enter 发送/Enter 换行
+  sendDrafts: new Map(), // sessionId -> 发送框草稿，按会话隔离
   autoScroll: true,
   hasMoreOlder: new Map(),  // sessionId → 是否还有更早的历史可加载
   loadingOlder: new Set(),  // 正在加载更早历史的 sessionId
@@ -1569,6 +1570,7 @@ async function deleteSession(id) {
     state.statsPeak.delete(id);
     state.statsWindows.delete(id);
     state.messages.delete(id);
+    state.sendDrafts.delete(id);
     if (state.selectedSessionId === id) selectSession(null);
     await loadProjects();
   } catch (e) {
@@ -1607,17 +1609,28 @@ function toggleSessionCollapse(id) {
 }
 
 async function selectSession(id, endpoint) {
+  // 按会话隔离发送框草稿：切出前保存，切入后恢复
+  const prevId = state.selectedSessionId;
+  if (prevId && els.sendInput) {
+    state.sendDrafts.set(prevId, els.sendInput.value);
+  }
   state.selectedSessionId = id;
   state.selectedMessageId = null;
   state.diffBaseId = null;
   state.selectedClientId = null;
-  state.clients.set(id, []);
-  state.endpointFilter.set(id, endpoint || 'all');
+  if (id) state.clients.set(id, []);
+  if (id) state.endpointFilter.set(id, endpoint || 'all');
   state.searchQuery = '';
   state.searchHits = [];
   state.activeHitIndex = -1;
   state.autoScroll = true;
   if (els.timelineSearch) els.timelineSearch.value = '';
+  // 恢复目标会话的草稿
+  if (els.sendInput) {
+    if (id && state.sendDrafts.has(id)) els.sendInput.value = state.sendDrafts.get(id);
+    else if (id) els.sendInput.value = '';
+    else els.sendInput.value = '';
+  }
   // 清空当前选中会话（或该 endpoint）的未读角标
   if (id) {
     if (endpoint) {
@@ -2333,6 +2346,7 @@ async function sendMessage() {
       endpoint,
     });
     els.sendInput.value = '';
+    if (state.selectedSessionId) state.sendDrafts.set(state.selectedSessionId, '');
   } catch (e) {
     showError('发送失败: ' + e);
   }
@@ -2427,7 +2441,7 @@ els.sessionRole.addEventListener('change', () => {
 });
 
 document.getElementById('btn-send').addEventListener('click', sendMessage);
-document.getElementById('btn-clear-input').addEventListener('click', () => { els.sendInput.value = ''; els.sendInput.focus(); });
+document.getElementById('btn-clear-input').addEventListener('click', () => { els.sendInput.value = ''; if (state.selectedSessionId) state.sendDrafts.set(state.selectedSessionId, ''); els.sendInput.focus(); });
 
 // 导出消息历史：弹框选择 JSON / 文本格式，调用后端保存（用户取消则不提示）
 async function exportMessages(format) {
@@ -2518,7 +2532,11 @@ els.sendInput.addEventListener('keydown', (ev) => {
   } else {
     const t = ev.target;
     t.setRangeText('\n', t.selectionStart, t.selectionEnd, 'end');
+    if (state.selectedSessionId) state.sendDrafts.set(state.selectedSessionId, t.value);
   }
+});
+els.sendInput.addEventListener('input', () => {
+  if (state.selectedSessionId) state.sendDrafts.set(state.selectedSessionId, els.sendInput.value);
 });
 
 function initSendKeyMode() {
@@ -2648,6 +2666,7 @@ function selectTemplate(name) {
   state.activeTemplate = name;
   updateTplTrigger();
   els.sendInput.value = t.content;
+  if (state.selectedSessionId) state.sendDrafts.set(state.selectedSessionId, t.content);
   els.sendInput.focus();
   els.sendInput.setSelectionRange(t.content.length, t.content.length);
 }
