@@ -1,9 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none">
-  <rect width="1024" height="1024" rx="224" fill="#1e1e1e"/>
-  <circle cx="256" cy="768" r="96" stroke="#0e639c" stroke-width="64"/>
-  <circle cx="768" cy="768" r="96" stroke="#0e639c" stroke-width="64"/>
-  <circle cx="512" cy="256" r="96" stroke="#0e639c" stroke-width="64"/>
-  <path d="M352 688L464 352M560 352L672 688" stroke="#0e639c" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M288 512H736" stroke="#858585" stroke-width="48" stroke-linecap="round" stroke-dasharray="64 64"/>
-  <path d="M512 352V512" stroke="#0e639c" stroke-width="64" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="g49" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#A78BFA"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <path d="M 512 220 L 750 360 L 750 660 L 512 804 L 274 660 L 274 360 Z" stroke="url(#g49)" stroke-width="32" fill="none" stroke-linejoin="round"/>
+  <ellipse cx="512" cy="512" rx="220" ry="140" stroke="#A78BFA" stroke-width="10" opacity="0.35"/>
+  <ellipse cx="512" cy="512" rx="140" ry="220" stroke="#22D3EE" stroke-width="10" opacity="0.35"/>
+  <circle cx="512" cy="220" r="48" fill="#A78BFA" stroke="white" stroke-width="10"/>
+  <circle cx="750" cy="660" r="48" fill="#22D3EE" stroke="white" stroke-width="10"/>
+  <circle cx="274" cy="660" r="48" fill="#FACC15" stroke="white" stroke-width="10"/>
+  <circle cx="512" cy="512" r="64" fill="white"/>
+  <circle cx="512" cy="512" r="28" fill="#1A0B2E"/>
 </svg>
