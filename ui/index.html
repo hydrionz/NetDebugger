@@ -65,9 +65,26 @@
 
     <main class="workspace">
       <aside class="sidebar" id="sidebar">
-        <div class="sidebar-toolbar">
-          <button id="btn-new-project">+ 分组</button>
-          <button id="btn-new-session">+ 连接</button>
+        <div class="sidebar-toolbar" style="position:relative">
+          <button id="btn-new-project" class="icon-btn" data-tip="新建分组" aria-label="新建分组">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              <line x1="12" y1="11" x2="12" y2="17"/>
+              <line x1="9" y1="14" x2="15" y2="14"/>
+            </svg>
+          </button>
+          <button id="btn-new-session" class="icon-btn" data-tip="新建连接" aria-label="新建连接">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+          </button>
+          <button id="btn-global-templates" class="icon-btn" data-tip="快捷指令" aria-label="快捷指令">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+          </button>
+          <div id="tpl-menu-global" class="tpl-menu hidden" style="position:absolute; left:0; top:100%; margin-top:6px; z-index:100"></div>
         </div>
         <div id="project-tree"></div>
       </aside>
@@ -159,15 +176,6 @@
           <div class="send-area" id="send-area">
             <div class="send-row">
               <label>目标: <select id="send-target"></select></label>
-              <label>快捷指令:
-                <span class="tpl-picker">
-                  <button type="button" id="tpl-trigger" class="tpl-trigger">
-                    <span id="tpl-trigger-label" class="tpl-trigger-label">选择快捷指令…</span>
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-                  </button>
-                  <div id="tpl-menu" class="tpl-menu hidden"></div>
-                </span>
-              </label>
               <label>发送格式:
                 <select id="send-mode">
                   <option value="text">文本</option>

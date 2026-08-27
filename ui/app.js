@@ -50,6 +50,7 @@ const els = {
   sendMode: document.getElementById('send-mode'),
   tplTrigger: document.getElementById('tpl-trigger'),
   tplMenu: document.getElementById('tpl-menu'),
+  tplMenuGlobal: document.getElementById('tpl-menu-global'),
   dlgTemplate: document.getElementById('dlg-template'),
   dlgTemplateMessage: document.getElementById('dlg-template-message'),
   dlgTemplateName: document.getElementById('dlg-template-name'),
@@ -2544,15 +2545,16 @@ function saveTemplates() {
   try { localStorage.setItem('netdebugger.templates', JSON.stringify(state.templates)); } catch { /* ignore */ }
 }
 
-function renderTemplateMenu() {
-  els.tplMenu.innerHTML = '';
+function fillTplMenu(menu) {
+  if (!menu) return;
+  menu.innerHTML = '';
   if (!state.templates.length) {
     const empty = document.createElement('div');
     empty.className = 'tpl-menu-item';
     empty.style.color = 'var(--text-muted)';
     empty.style.cursor = 'default';
     empty.textContent = '暂无快捷指令';
-    els.tplMenu.appendChild(empty);
+    menu.appendChild(empty);
   }
   for (const t of state.templates) {
     const item = document.createElement('div');
@@ -2577,13 +2579,18 @@ function renderTemplateMenu() {
     btnDel.textContent = '✕';
     actions.append(btnEdit, btnDel);
     item.append(nameSpan, actions);
-    els.tplMenu.appendChild(item);
+    menu.appendChild(item);
   }
   const newItem = document.createElement('div');
   newItem.className = 'tpl-menu-item tpl-menu-new';
   newItem.dataset.act = 'new';
   newItem.textContent = '＋ 新建快捷指令';
-  els.tplMenu.appendChild(newItem);
+  menu.appendChild(newItem);
+}
+
+function renderTemplateMenu() {
+  fillTplMenu(els.tplMenu);
+  fillTplMenu(els.tplMenuGlobal);
   updateTplTrigger();
 }
 
@@ -2593,22 +2600,37 @@ function updateTplTrigger() {
 }
 
 function toggleTemplateMenu() {
+  if (!els.tplMenu) return;
   if (els.tplMenu.classList.contains('hidden')) {
     renderTemplateMenu();
     els.tplMenu.classList.remove('hidden');
+    els.tplMenuGlobal?.classList.add('hidden');
   } else {
     els.tplMenu.classList.add('hidden');
   }
 }
 
+function toggleGlobalTemplateMenu() {
+  if (!els.tplMenuGlobal) return;
+  if (els.tplMenuGlobal.classList.contains('hidden')) {
+    renderTemplateMenu();
+    els.tplMenuGlobal.classList.remove('hidden');
+    els.tplMenu?.classList.add('hidden');
+  } else {
+    els.tplMenuGlobal.classList.add('hidden');
+  }
+}
+
 function closeTemplateMenu() {
-  els.tplMenu.classList.add('hidden');
+  els.tplMenu?.classList.add('hidden');
+  els.tplMenuGlobal?.classList.add('hidden');
 }
 
 async function onTemplateMenuClick(e) {
   const act = e.target.closest('.tpl-act');
   const item = e.target.closest('.tpl-menu-item');
   if (!item) return;
+  // 点击来自哪个菜单都关闭两个
   closeTemplateMenu();
   if (item.dataset.act === 'new') { createTemplate(); return; }
   const name = item.dataset.name;
@@ -2761,7 +2783,8 @@ function initTemplateResize() {
   });
 }
 
-els.tplTrigger.addEventListener('click', (e) => { e.stopPropagation(); toggleTemplateMenu(); });
+els.tplTrigger?.addEventListener('click', (e) => { e.stopPropagation(); toggleTemplateMenu(); });
+document.getElementById('btn-global-templates')?.addEventListener('click', (e) => { e.stopPropagation(); toggleGlobalTemplateMenu(); });
 
 // 按住弹框标题区拖动移动整个弹框
 function initTemplateDrag() {
@@ -2799,8 +2822,14 @@ function initTemplateDrag() {
   });
 }
 
-els.tplMenu.addEventListener('click', onTemplateMenuClick);
-document.addEventListener('click', closeTemplateMenu);
+els.tplMenu?.addEventListener('click', onTemplateMenuClick);
+els.tplMenuGlobal?.addEventListener('click', onTemplateMenuClick);
+document.addEventListener('click', (e) => {
+  // 全局菜单为 .tpl-menu，统一关闭
+  if (e.target.closest('.tpl-menu')) return;
+  if (e.target.closest('#btn-global-templates') || e.target.closest('#tpl-trigger')) return;
+  closeTemplateMenu();
+});
 
 els.btnEndpointAdd.addEventListener('click', addEndpointFromInput);
 els.endpointInput.addEventListener('keydown', (ev) => {
