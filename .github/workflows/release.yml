@@ -38,15 +38,11 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Write signing key to file
-        shell: bash
-        run: echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" > "${{ runner.temp }}/tauri.key"
-
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ runner.temp }}/tauri.key
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: List bundle artifacts (debug)
