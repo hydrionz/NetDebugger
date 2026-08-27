@@ -85,17 +85,25 @@ jobs:
           TAG="${{ github.ref_name }}"
           BASE_URL="https://github.com/hydrionz/NetDebugger/releases/download/${TAG}"
 
-          # Find files with fallback ( Tauri v2 NSIS may produce .exe + .exe.sig or .nsis.zip + .nsis.zip.sig )
-          find_file() { find "$1" -name "$2" 2>/dev/null | head -1; }
+          echo "=== artifacts tree ==="
+          find artifacts -type f -ls 2>/dev/null || true
+          echo "=== ls -R artifacts ==="
+          ls -R artifacts 2>/dev/null || true
 
-          WIN_BUNDLE=$(find_file artifacts/windows '*_x64-setup.exe')
-          if [ -z "$WIN_BUNDLE" ]; then WIN_BUNDLE=$(find_file artifacts/windows '*_x64-setup.nsis.zip'); fi
-          if [ -z "$WIN_BUNDLE" ]; then WIN_BUNDLE=$(find_file artifacts/windows '*.nsis.zip'); fi
-          if [ -z "$WIN_BUNDLE" ]; then WIN_BUNDLE=$(find_file artifacts/windows '*.exe'); fi
+          # Find files with fallback ( Tauri v2 NSIS may produce .exe + .exe.sig or .nsis.zip + .nsis.zip.sig )
+          # Search in artifacts (recursive) to handle windows/nsis subdirs
+          find_file() { find artifacts -name "$1" 2>/dev/null | head -1; }
+
+          WIN_BUNDLE=$(find_file '*_x64-setup.exe')
+          if [ -z "$WIN_BUNDLE" ]; then WIN_BUNDLE=$(find_file '*_x64-setup.nsis.zip'); fi
+          if [ -z "$WIN_BUNDLE" ]; then WIN_BUNDLE=$(find_file '*.nsis.zip'); fi
+          if [ -z "$WIN_BUNDLE" ]; then WIN_BUNDLE=$(find_file '*.exe'); fi
 
           WIN_SIG_FILE="${WIN_BUNDLE}.sig"
-          if [ ! -f "$WIN_SIG_FILE" ]; then WIN_SIG_FILE=$(find_file artifacts/windows '*.exe.sig'); fi
-          if [ ! -f "$WIN_SIG_FILE" ]; then WIN_SIG_FILE=$(find_file artifacts/windows '*.nsis.zip.sig'); fi
+          if [ ! -f "$WIN_SIG_FILE" ]; then WIN_SIG_FILE=$(find_file '*.exe.sig'); fi
+          if [ ! -f "$WIN_SIG_FILE" ]; then WIN_SIG_FILE=$(find_file '*.nsis.zip.sig'); fi
+          # Fallback: any .sig
+          if [ ! -f "$WIN_SIG_FILE" ]; then WIN_SIG_FILE=$(find_file '*.sig'); fi
 
           # Read signature (empty if not found — updater will still try, but log it)
           WIN_SIG=$( [ -n "$WIN_SIG_FILE" ] && [ -f "$WIN_SIG_FILE" ] && cat "$WIN_SIG_FILE" || echo "" )
@@ -105,7 +113,9 @@ jobs:
           echo "WIN_SIG length=${#WIN_SIG}"
 
           if [ -z "$WIN_BUNDLE" ]; then
-            echo "::error::Windows bundle not found (expected *_x64-setup.exe or *.nsis.zip)"
+            echo "::error::Windows bundle not found (expected *_x64-setup.exe or *.nsis.zip) — listing artifacts:"
+            find artifacts -type f 2>/dev/null || true
+            ls -R artifacts 2>/dev/null || true
             exit 1
           fi
           if [ -z "$WIN_SIG" ]; then
