@@ -51,6 +51,7 @@ jobs:
 
       - name: List bundle artifacts (debug)
         if: always()
+        shell: bash
         run: |
           echo "=== src-tauri/target/release/bundle ==="
           ls -R src-tauri/target/release/bundle 2>/dev/null || echo "no bundle dir"
