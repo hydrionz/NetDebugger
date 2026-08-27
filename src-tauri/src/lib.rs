@@ -204,6 +204,8 @@ pub fn run() {
             commands::load_messages,
             commands::clear_messages,
             commands::export_messages,
+            commands::export_workspace,
+            commands::import_workspace,
             commands::count_messages_by_endpoint,
             commands::delete_messages_by_endpoint,
             commands::delete_message,

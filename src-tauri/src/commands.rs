@@ -371,6 +371,107 @@ fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ")
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct WorkspaceExport {
+    version: u32,
+    exported_at: i64,
+    projects: Vec<db::ProjectWithSessions>,
+}
+
+#[tauri::command]
+pub async fn export_workspace(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    let projects = db::list_projects_with_sessions(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+    // 过滤空的未分组占位
+    let has_data = projects.iter().any(|p| !p.sessions.is_empty());
+    if !has_data {
+        return Err("当前没有可导出的分组或连接".to_string());
+    }
+    let export = WorkspaceExport {
+        version: 1,
+        exported_at: chrono::Utc::now().timestamp_millis(),
+        projects,
+    };
+    let json = serde_json::to_vec_pretty(&export).map_err(|e| e.to_string())?;
+    let file = rfd::AsyncFileDialog::new()
+        .set_file_name("netdebugger-workspace.json")
+        .add_filter("JSON 文件", &["json"])
+        .save_file()
+        .await;
+    let Some(file) = file else { return Ok(None) };
+    let path = file.path().to_path_buf();
+    file.write(&json).await.map_err(|e| e.to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+pub async fn import_workspace(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    let file = rfd::AsyncFileDialog::new()
+        .add_filter("JSON 文件", &["json"])
+        .pick_file()
+        .await;
+    let Some(file) = file else { return Ok(None) };
+    let data = file.read().await;
+    let text = String::from_utf8(data).map_err(|e| e.to_string())?;
+    let export: WorkspaceExport = serde_json::from_str(&text).map_err(|e| format!("JSON 解析失败: {}", e))?;
+    if export.version != 1 {
+        return Err(format!("不支持的版本: {}", export.version));
+    }
+    let mut imported = 0usize;
+    for pw in export.projects {
+        // 未分组为虚拟分组，其 sessions 应以无分组导入
+        if pw.project.id == "_ungrouped" {
+            for s in pw.sessions {
+                db::create_session(
+                    &state.db,
+                    None,
+                    s.name.as_deref(),
+                    &s.protocol,
+                    &s.role,
+                    s.bind_addr,
+                    s.target_url,
+                    s.endpoints,
+                    s.headers,
+                    s.subprotocols,
+                    s.auto_reconnect,
+                    s.heartbeat_interval,
+                    s.auto_replies,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+                imported += 1;
+            }
+            continue;
+        }
+        // 真实分组：创建新分组（重名也新建，避免覆盖）
+        let new_proj = db::create_project(&state.db, &pw.project.name)
+            .await
+            .map_err(|e| e.to_string())?;
+        for s in pw.sessions {
+            db::create_session(
+                &state.db,
+                Some(&new_proj.id),
+                s.name.as_deref(),
+                &s.protocol,
+                &s.role,
+                s.bind_addr,
+                s.target_url,
+                s.endpoints,
+                s.headers,
+                s.subprotocols,
+                s.auto_reconnect,
+                s.heartbeat_interval,
+                s.auto_replies,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            imported += 1;
+        }
+    }
+    Ok(Some(format!("已导入 {} 个连接", imported)))
+}
+
 #[tauri::command]
 pub async fn count_messages_by_endpoint(
     state: State<'_ , AppState>,

@@ -1,7 +1,7 @@
 # NetDebugger 项目状态归档
 
 > 本文档记录 NetDebugger 的当前状态、已实现功能、待办事项及技术债务。开发规则见 [AGENTS.md](AGENTS.md)。
-> 最后更新：2026-08-27（49 紧凑版图标与欢迎/关于大图标 160/96）
+> 最后更新：2026-08-27（工作区导入导出）
 
 ---
 
@@ -77,6 +77,7 @@
 - [x] 发送框按会话隔离：`state.sendDrafts` Map 按 `sessionId` 保存草稿，切换会话时自动保存/恢复，发送/清空/模板插入同步更新，删除会话时清理
 - [x] 时间线批量选择：工具栏 `批量选择` 切批量模式（消息与提示语均可勾选，`全选/indeterminate/已选 n/退出`），批量时右上角 `导出/清空` 仅处理已选（导出为 JSON/文本前端按已选生成并下载，清空逐条 `delete_message` 并前端过滤），切换会话按会话隔离清空已选
 - [x] 应用图标高清化：`49` 透明六变体为全量图标（`icon.svg/png/ico/icns` 等，`49-tight` 紧凑版边距收窄约 80px），`ui/titlebar-icon.png` 256px、`ui/app-icon.png` 512px 供欢迎页 `160px`/关于页 `96px` 高清展示（原 32px→72/48 模糊已替换），任务栏/系统托盘随 `bundle.icon` 同步新图标
+- [x] 工作区导入导出：侧边栏 `导出/导入` 图标按钮，`export_workspace` 聚合 `list_projects_with_sessions` 为 `WorkspaceExport{version:1, projects}` 经 `rfd` 保存 `netdebugger-workspace.json`，`import_workspace` 选文件解析后按分组新建（`_ungrouped` 会话无分组导入），成功 `toast` 并 `loadProjects` 刷新
 
 ### 2.3 自动更新与 CI/CD
 
@@ -115,7 +116,7 @@
 - [x] **详情内搜索**：详情面板（文本/JSON 树）内 `Ctrl+F` 搜索（已实现，见 2.2）
 - [ ] **持续落盘日志**：可选自动追加写入本地文件（按会话/按日切分），长时间抓包不丢
 - [ ] **环境变量/模板变量**：`{{host}}`, `{{token}}` 在目标地址/请求头/消息体中替换
-- [ ] **工作区导入导出**：分组+连接配置导出为 JSON 文件，团队共享、一键恢复
+- [x] **工作区导入导出**：分组+连接配置导出为 JSON 文件，团队共享、一键恢复（已实现，见 2.2）
 
 ### 低优先级 / 未来协议
 

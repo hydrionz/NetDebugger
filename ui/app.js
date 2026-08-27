@@ -2370,6 +2370,18 @@ document.getElementById('bulk-select-all')?.addEventListener('change', (e) => {
   else visibleIds.forEach(mid => state.bulkSelected.delete(mid));
   updateBulkBar(); updateBulkButtonTips(); renderTimeline();
 });
+document.getElementById('btn-export-workspace')?.addEventListener('click', async () => {
+  try {
+    const res = await invoke('export_workspace');
+    if (res) showToast('已导出到 ' + res);
+  } catch (e) { showError('导出失败: ' + e); }
+});
+document.getElementById('btn-import-workspace')?.addEventListener('click', async () => {
+  try {
+    const res = await invoke('import_workspace');
+    if (res) { showToast(res); await loadProjects(); }
+  } catch (e) { showError('导入失败: ' + e); }
+});
 
 function renderClientList() {
   const id = state.selectedSessionId;
