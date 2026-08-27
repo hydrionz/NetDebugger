@@ -19,6 +19,8 @@ const state = {
   truncateMessages: true,  // 长消息截断显示（工具栏"截断"切换，localStorage 持久化）
   sendKeyMode: 'enter',  // 'enter' = Enter 发送/Shift+Enter 换行；'ctrlEnter' = Ctrl+Enter 发送/Enter 换行
   sendDrafts: new Map(), // sessionId -> 发送框草稿，按会话隔离
+  bulkSelectMode: false,
+  bulkSelected: new Set(), // 批量选择的 message id（含 notice 临时 id）
   autoScroll: true,
   hasMoreOlder: new Map(),  // sessionId → 是否还有更早的历史可加载
   loadingOlder: new Set(),  // 正在加载更早历史的 sessionId
@@ -1631,6 +1633,12 @@ async function selectSession(id, endpoint) {
     else if (id) els.sendInput.value = '';
     else els.sendInput.value = '';
   }
+  // 切换会话时清空批量选择（按会话隔离）
+  if (prevId !== id) {
+    state.bulkSelected.clear();
+    updateBulkBar();
+    updateBulkButtonTips();
+  }
   // 清空当前选中会话（或该 endpoint）的未读角标
   if (id) {
     if (endpoint) {
@@ -1752,9 +1760,14 @@ function appendNotice(sessionId, notice) {
   if (state.selectedSessionId !== sessionId) return;
   const list = state.messages.get(sessionId) || [];
   list.push({
+    id: `notice-${notice.timestamp}-${Math.random().toString(36).slice(2, 8)}`,
+    session_id: sessionId,
     payload_type: 'notice',
     payload: new TextEncoder().encode(notice.text),
     timestamp: notice.timestamp,
+    size: new TextEncoder().encode(notice.text).length,
+    direction: 'in',
+    pinned: 0,
   });
   renderTimeline();
 }
@@ -1850,6 +1863,25 @@ function renderTimeline() {
   }
   const hitCountById = new Map(state.searchHits.map((h) => [h.messageId, h.matchCount]));
 
+  // 批量选择：同步全选框与计数
+  if (state.bulkSelectMode) {
+    const visibleIds = msgs.map(m => m.id).filter(Boolean);
+    const bulkAll = document.getElementById('bulk-select-all');
+    if (bulkAll) {
+      const allSelected = visibleIds.length > 0 && visibleIds.every(id => state.bulkSelected.has(id));
+      bulkAll.checked = allSelected;
+      bulkAll.indeterminate = !allSelected && visibleIds.some(id => state.bulkSelected.has(id));
+    }
+    const countEl = document.getElementById('bulk-count');
+    if (countEl) countEl.textContent = `已选 ${state.bulkSelected.size}`;
+    updateBulkButtonTips();
+    const bar = document.getElementById('bulk-bar');
+    if (bar) { bar.classList.remove('hidden'); bar.style.display = 'flex'; }
+  } else {
+    const bar = document.getElementById('bulk-bar');
+    if (bar) { bar.classList.add('hidden'); bar.style.display = 'none'; }
+  }
+
   if (msgs.length === 0) {
     els.timeline.innerHTML = '<div class="detail-empty">暂无消息</div>';
     return;
@@ -1859,7 +1891,26 @@ function renderTimeline() {
     if (m.payload_type === 'notice') {
       const n = document.createElement('div');
       n.className = 'timeline-notice';
-      n.innerHTML = `<span>${formatTime(m.timestamp)}</span> ${escapeHtml(bytesToText(m.payload))}`;
+      if (state.bulkSelectMode && m.id) {
+        const checked = state.bulkSelected.has(m.id) ? 'checked' : '';
+        n.innerHTML = `<input type="checkbox" class="bulk-check" data-bulk-id="${m.id}" ${checked} style="margin-right:8px"><span>${formatTime(m.timestamp)}</span> ${escapeHtml(bytesToText(m.payload))}`;
+        n.style.display = 'flex';
+        n.style.alignItems = 'center';
+        n.style.cursor = 'pointer';
+        n.addEventListener('click', (e) => {
+          if (e.target.closest('.bulk-check')) return;
+          if (state.bulkSelected.has(m.id)) state.bulkSelected.delete(m.id); else state.bulkSelected.add(m.id);
+          updateBulkBar(); updateBulkButtonTips(); renderTimeline();
+        });
+        const chk = n.querySelector('.bulk-check');
+        if (chk) chk.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (chk.checked) state.bulkSelected.add(m.id); else state.bulkSelected.delete(m.id);
+          updateBulkBar(); updateBulkButtonTips();
+        });
+      } else {
+        n.innerHTML = `<span>${formatTime(m.timestamp)}</span> ${escapeHtml(bytesToText(m.payload))}`;
+      }
       els.timeline.appendChild(n);
       continue;
     }
@@ -1899,7 +1950,8 @@ function renderTimeline() {
       displayText = text.length > budget ? text.slice(0, budget) + '…' : text;
     }
     const body = q ? highlightText(displayText, q) : escapeHtml(displayText);
-    el.innerHTML = `
+    const bulkCheck = state.bulkSelectMode ? `<input type="checkbox" class="bulk-check" data-bulk-id="${m.id}" ${state.bulkSelected.has(m.id) ? 'checked' : ''} style="margin:6px; flex-shrink:0">` : '';
+    const inner = `
       <div class="message-meta">
         <span>${formatTime(m.timestamp)}</span>
         <span class="msg-type ${m.payload_type === 'binary' ? 'binary' : 'txt'}">${m.payload_type === 'binary' ? 'BIN' : 'TXT'}</span>
@@ -1911,22 +1963,43 @@ function renderTimeline() {
       </div>
       <div class="message-body">${body}</div>
     `;
-    el.addEventListener('contextmenu', (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      showMsgMenu(ev.clientX, ev.clientY, m.id);
-    });
-    el.addEventListener('click', () => {
-      state.selectedMessageId = m.id;
-      // 点击的是搜索命中时，同步活动索引，让 ↑/↓ 从此处继续
-      const idx = state.searchHits.findIndex((h) => h.messageId === m.id);
-      if (idx >= 0) state.activeHitIndex = idx;
-      // 完整 JSON 自动切到 JSON tab；二进制帧默认切到 Hex tab；其余走文本 tab
-      if (m.payload_type === 'binary') setDetailTab('hex');
-      else setDetailTab(isCompleteJson(m.payload) ? 'json' : 'text');
-      renderTimeline();
-      renderDetail();
-    });
+    if (state.bulkSelectMode) {
+      el.innerHTML = `<div style="display:flex; align-items:flex-start; gap:6px">${bulkCheck}<div style="flex:1; min-width:0">${inner}</div></div>`;
+      el.style.cursor = 'pointer';
+      const chk = el.querySelector('.bulk-check');
+      if (chk) chk.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (chk.checked) state.bulkSelected.add(m.id); else state.bulkSelected.delete(m.id);
+        updateBulkBar(); updateBulkButtonTips();
+      });
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.bulk-check')) return;
+        if (state.bulkSelected.has(m.id)) state.bulkSelected.delete(m.id); else state.bulkSelected.add(m.id);
+        updateBulkBar(); updateBulkButtonTips(); renderTimeline();
+      });
+      el.addEventListener('contextmenu', (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        // 批量模式下右键不弹消息菜单
+      });
+    } else {
+      el.innerHTML = inner;
+      el.addEventListener('contextmenu', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        showMsgMenu(ev.clientX, ev.clientY, m.id);
+      });
+      el.addEventListener('click', () => {
+        state.selectedMessageId = m.id;
+        // 点击的是搜索命中时，同步活动索引，让 ↑/↓ 从此处继续
+        const idx = state.searchHits.findIndex((h) => h.messageId === m.id);
+        if (idx >= 0) state.activeHitIndex = idx;
+        // 完整 JSON 自动切到 JSON tab；二进制帧默认切到 Hex tab；其余走文本 tab
+        if (m.payload_type === 'binary') setDetailTab('hex');
+        else setDetailTab(isCompleteJson(m.payload) ? 'json' : 'text');
+        renderTimeline();
+        renderDetail();
+      });
+    }
     els.timeline.appendChild(el);
   }
 
@@ -2244,6 +2317,60 @@ function updateSendArea() {
   }
 }
 
+function toggleBulkSelectMode() {
+  state.bulkSelectMode = !state.bulkSelectMode;
+  if (!state.bulkSelectMode) state.bulkSelected.clear();
+  updateBulkBar();
+  updateBulkButtonTips();
+  renderTimeline();
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulk-bar');
+  const countEl = document.getElementById('bulk-count');
+  const selectAll = document.getElementById('bulk-select-all');
+  const btn = document.getElementById('btn-bulk-select');
+  if (!bar) return;
+  if (state.bulkSelectMode) {
+    bar.classList.remove('hidden');
+    bar.style.display = 'flex';
+    if (btn) btn.classList.add('active');
+  } else {
+    bar.classList.add('hidden');
+    bar.style.display = 'none';
+    if (btn) btn.classList.remove('active');
+  }
+  if (countEl) countEl.textContent = `已选 ${state.bulkSelected.size}`;
+  if (selectAll) {
+    // 全选状态由 renderTimeline 按可见条目更新
+    const id = state.selectedSessionId;
+    const msgs = state.messages.get(id) || [];
+    // 简化：若已选数等于当前会话总可见数则勾选，否则不勾
+    // 实际在 render 后会校正，这里仅不干扰
+  }
+}
+
+function updateBulkButtonTips() {
+  const exp = document.getElementById('btn-export');
+  const clr = document.getElementById('btn-clear');
+  const inBulk = state.bulkSelectMode && state.bulkSelected.size > 0;
+  if (exp) exp.dataset.tip = inBulk ? `导出已选 (${state.bulkSelected.size})` : '导出消息历史（JSON/文本）';
+  if (clr) clr.dataset.tip = inBulk ? `清空已选 (${state.bulkSelected.size})` : '清空当前会话的消息记录';
+}
+
+document.getElementById('btn-bulk-select')?.addEventListener('click', () => toggleBulkSelectMode());
+document.getElementById('btn-bulk-exit')?.addEventListener('click', () => { if (state.bulkSelectMode) toggleBulkSelectMode(); });
+document.getElementById('bulk-select-all')?.addEventListener('change', (e) => {
+  const id = state.selectedSessionId;
+  if (!id) return;
+  const checked = e.target.checked;
+  // 按当前可见的过滤结果全选/全不选（通过 DOM 收集可见 bulk-check）
+  const visibleIds = Array.from(document.querySelectorAll('.bulk-check')).map(el => el.dataset.bulkId).filter(Boolean);
+  if (checked) visibleIds.forEach(mid => state.bulkSelected.add(mid));
+  else visibleIds.forEach(mid => state.bulkSelected.delete(mid));
+  updateBulkBar(); updateBulkButtonTips(); renderTimeline();
+});
+
 function renderClientList() {
   const id = state.selectedSessionId;
   const sess = id ? findSession(id) : null;
@@ -2386,6 +2513,24 @@ function tryFormatJson(text) {
 async function clearMessages() {
   const id = state.selectedSessionId;
   if (!id) return;
+  const isBulk = state.bulkSelectMode && state.bulkSelected.size > 0;
+  if (isBulk) {
+    if (!await showConfirm(`确定删除已选的 ${state.bulkSelected.size} 条记录？`)) return;
+    try {
+      const ids = Array.from(state.bulkSelected);
+      for (const mid of ids) {
+        try { await invoke('delete_message', { messageId: mid }); } catch {}
+      }
+      const remaining = (state.messages.get(id) || []).filter(m => !state.bulkSelected.has(m.id));
+      state.messages.set(id, remaining);
+      state.bulkSelected.clear();
+      if (!remaining.some(m => m.id === state.selectedMessageId)) { state.selectedMessageId = null; renderDetail(); }
+      if (!remaining.some(m => m.id === state.diffBaseId)) state.diffBaseId = null;
+      updateBulkBar(); updateBulkButtonTips(); renderTimeline();
+      showToast('已删除已选');
+    } catch (e) { showError('删除失败: ' + e); }
+    return;
+  }
   if (!await showConfirm('确定清空当前会话的消息记录？')) return;
   try {
     await invoke('clear_messages', { sessionId: id });
@@ -2397,6 +2542,7 @@ async function clearMessages() {
       renderDetail();
     }
     if (!kept.some(m => m.id === state.diffBaseId)) state.diffBaseId = null;
+    state.bulkSelected.clear();
     state.statsPeak.delete(id);
     state.statsWindows.delete(id);
     state.unreadCounts.delete(id);
@@ -2447,6 +2593,62 @@ document.getElementById('btn-clear-input').addEventListener('click', () => { els
 async function exportMessages(format) {
   const id = state.selectedSessionId;
   if (!id) return;
+  const isBulk = state.bulkSelectMode && state.bulkSelected.size > 0;
+  if (isBulk) {
+    const all = state.messages.get(id) || [];
+    const selected = all.filter(m => state.bulkSelected.has(m.id));
+    if (!selected.length) { showError('未选择消息'); return; }
+    try {
+      let content, mime, ext;
+      if (format === 'json') {
+        const items = selected.map(m => {
+          const isBinary = m.payload_type === 'binary';
+          const text = isBinary ? bytesToHex(m.payload) : bytesToText(m.payload);
+          let b64;
+          if (isBinary) {
+            try { b64 = btoa(String.fromCharCode(...m.payload)); } catch { b64 = ''; }
+          }
+          return {
+            timestamp: m.timestamp,
+            time: new Date(m.timestamp).toLocaleString('zh-CN'),
+            direction: m.direction,
+            payload_type: m.payload_type,
+            endpoint: m.endpoint,
+            sender: m.sender,
+            size: m.size,
+            text,
+            payload_base64: b64 || undefined,
+          };
+        });
+        content = JSON.stringify(items, null, 2);
+        mime = 'application/json';
+        ext = 'json';
+      } else {
+        let out = '';
+        for (const m of selected) {
+          const time = new Date(m.timestamp).toLocaleString('zh-CN');
+          const arrow = m.direction === 'in' ? '← 收' : '→ 发';
+          const ep = m.endpoint || '-';
+          const body = m.payload_type === 'binary' ? bytesToHex(m.payload) : bytesToText(m.payload);
+          out += `[${time}] ${arrow} ${m.payload_type} ep=${ep} size=${m.size}\n${body}\n\n`;
+        }
+        content = out;
+        mime = 'text/plain';
+        ext = 'txt';
+      }
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `messages-selected.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast('已导出已选');
+    } catch (e) { showError('导出失败: ' + e); }
+    return;
+  }
   try {
     const path = await invoke('export_messages', { sessionId: id, format });
     if (path) showToast('已导出到 ' + path);
