@@ -56,6 +56,7 @@ jobs:
           name: windows
           path: |
             src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/nsis/*.exe.sig
             src-tauri/target/release/bundle/nsis/*.nsis.zip
             src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
 
@@ -84,23 +85,39 @@ jobs:
           TAG="${{ github.ref_name }}"
           BASE_URL="https://github.com/hydrionz/NetDebugger/releases/download/${TAG}"
 
-          # Find files with fallback
+          # Find files with fallback ( Tauri v2 NSIS may produce .exe + .exe.sig or .nsis.zip + .nsis.zip.sig )
           find_file() { find "$1" -name "$2" 2>/dev/null | head -1; }
 
-          WIN_NSIS_ZIP=$(find_file artifacts/windows '*_x64-setup.nsis.zip')
-          WIN_SIG_FILE=$(find_file artifacts/windows '*.nsis.zip.sig')
+          WIN_BUNDLE=$(find_file artifacts/windows '*_x64-setup.exe')
+          if [ -z "$WIN_BUNDLE" ]; then WIN_BUNDLE=$(find_file artifacts/windows '*_x64-setup.nsis.zip'); fi
+          if [ -z "$WIN_BUNDLE" ]; then WIN_BUNDLE=$(find_file artifacts/windows '*.nsis.zip'); fi
+          if [ -z "$WIN_BUNDLE" ]; then WIN_BUNDLE=$(find_file artifacts/windows '*.exe'); fi
 
-          # Read signatures
-          WIN_SIG=$( [ -n "$WIN_SIG_FILE" ] && cat "$WIN_SIG_FILE" || echo "" )
+          WIN_SIG_FILE="${WIN_BUNDLE}.sig"
+          if [ ! -f "$WIN_SIG_FILE" ]; then WIN_SIG_FILE=$(find_file artifacts/windows '*.exe.sig'); fi
+          if [ ! -f "$WIN_SIG_FILE" ]; then WIN_SIG_FILE=$(find_file artifacts/windows '*.nsis.zip.sig'); fi
 
-          echo "WIN_NSIS_ZIP=$WIN_NSIS_ZIP"
+          # Read signature (empty if not found — updater will still try, but log it)
+          WIN_SIG=$( [ -n "$WIN_SIG_FILE" ] && [ -f "$WIN_SIG_FILE" ] && cat "$WIN_SIG_FILE" || echo "" )
+
+          echo "WIN_BUNDLE=$WIN_BUNDLE"
+          echo "WIN_SIG_FILE=$WIN_SIG_FILE"
+          echo "WIN_SIG length=${#WIN_SIG}"
+
+          if [ -z "$WIN_BUNDLE" ]; then
+            echo "::error::Windows bundle not found (expected *_x64-setup.exe or *.nsis.zip)"
+            exit 1
+          fi
+          if [ -z "$WIN_SIG" ]; then
+            echo "::warning::Windows signature empty — check TAURI_SIGNING_PRIVATE_KEY"
+          fi
 
           jq -n \
             --arg version "v${VERSION}" \
             --arg notes "NetDebugger v${VERSION}" \
             --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg win_sig "$WIN_SIG" \
-            --arg win_url "${BASE_URL}/$(basename $WIN_NSIS_ZIP)" \
+            --arg win_url "${BASE_URL}/$(basename $WIN_BUNDLE)" \
             '{
               version: $version,
               notes: $notes,
