@@ -30,6 +30,8 @@ const state = {
   diffBaseId: null,
   statsPeak: new Map(),
   statsWindows: new Map(),
+  detailSearchQuery: '',
+  detailSearchIndex: -1,
 };
 
 const els = {
@@ -2013,27 +2015,34 @@ function renderDetail() {
 
 function renderDetailBody(m) {
   const bytes = m.payload;
+  const dq = state.detailSearchQuery.trim();
+  const tq = state.searchQuery.trim();
+  const q = dq || tq;
   if (detailTab === 'hex') {
-    els.detailBody.textContent = bytesToHex(bytes);
+    const hex = bytesToHex(bytes);
+    if (q) els.detailBody.innerHTML = highlightText(hex, q);
+    else els.detailBody.textContent = hex;
   } else if (detailTab === 'json') {
     const text = bytesToText(bytes);
-    const q = state.searchQuery.trim();
     try {
       const parsed = JSON.parse(text);
       if (jsonSubTab === 'tree') {
         els.detailBody.innerHTML = `<div class="j-tree">${buildJsonTree(parsed, q, 0)}</div>`;
       } else {
         const pretty = JSON.stringify(parsed, null, 2);
-        els.detailBody.innerHTML = highlightJson(pretty, q);
+        els.detailBody.innerHTML = q ? highlightJson(pretty, q) : escapeHtml(pretty);
       }
     } catch {
-      els.detailBody.textContent = '不是有效的 JSON';
+      const fallback = bytesToText(bytes);
+      if (q) els.detailBody.innerHTML = highlightText(fallback, q);
+      else els.detailBody.textContent = fallback;
     }
   } else {
     const text = bytesToText(bytes);
-    const q = state.searchQuery.trim();
     els.detailBody.innerHTML = q ? highlightText(text, q) : escapeHtml(text);
   }
+  if (dq) updateDetailSearchNav();
+  else clearDetailSearchNav();
 }
 
 function buildJsonTree(value, query, depth) {
@@ -2052,12 +2061,12 @@ function buildJsonTree(value, query, depth) {
   const isArray = Array.isArray(value);
   const entries = isArray ? value.map((v, i) => [i, v]) : Object.entries(value);
   if (entries.length === 0) return isArray ? '[]' : '{}';
-  const collapsed = depth >= 2 ? ' j-collapsed' : '';
+  const collapsed = depth >= 2 && !query ? ' j-collapsed' : '';
   const summary = isArray ? `Array(${entries.length})` : `Object{${entries.length}}`;
   const open = isArray ? '[' : '{';
   const close = isArray ? ']' : '}';
   let html = `<div class="j-node${collapsed}">`;
-  html += `<span class="j-toggle">${depth >= 2 ? '▶' : '▼'}</span>`;
+  html += `<span class="j-toggle">${collapsed ? '▶' : '▼'}</span>`;
   html += `<span class="j-summary${collapsed ? '' : ' hidden'}">${hl(summary)}</span>`;
   html += `<span class="j-bracket">${open}</span>`;
   html += `<div class="j-children">`;
@@ -2094,6 +2103,72 @@ function highlightJson(json, query) {
         : match;
       return `<span class="${cls}">${inner}</span>`;
     });
+}
+
+function showDetailSearch() {
+  const bar = document.getElementById('detail-search-bar');
+  const inp = document.getElementById('detail-search-input');
+  if (!bar || !inp) return;
+  if (els.detailContent.classList.contains('hidden')) return;
+  bar.classList.remove('hidden');
+  bar.style.display = 'flex';
+  setTimeout(() => inp.focus(), 0);
+  if (state.detailSearchQuery) {
+    // 已有查询则重绘以高亮
+    const id = state.selectedMessageId;
+    if (id) { const m = (state.messages.get(state.selectedSessionId)||[]).find(x=>x.id===id); if (m) renderDetailBody(m); }
+  }
+}
+
+function hideDetailSearch() {
+  const bar = document.getElementById('detail-search-bar');
+  const inp = document.getElementById('detail-search-input');
+  if (bar) { bar.classList.add('hidden'); bar.style.display = 'none'; }
+  if (state.detailSearchQuery) {
+    state.detailSearchQuery = '';
+    state.detailSearchIndex = -1;
+    const id = state.selectedMessageId;
+    if (id) { const m = (state.messages.get(state.selectedSessionId)||[]).find(x=>x.id===id); if (m) renderDetailBody(m); }
+    else clearDetailSearchNav();
+  } else {
+    clearDetailSearchNav();
+  }
+  if (inp) inp.value = '';
+}
+
+function updateDetailSearchNav() {
+  const marks = els.detailBody.querySelectorAll('mark');
+  const count = marks.length;
+  const counter = document.getElementById('detail-search-count');
+  if (count === 0) {
+    state.detailSearchIndex = -1;
+    if (counter) counter.textContent = '0/0';
+    return;
+  }
+  if (state.detailSearchIndex < 0 || state.detailSearchIndex >= count) state.detailSearchIndex = 0;
+  if (counter) counter.textContent = `${state.detailSearchIndex + 1}/${count}`;
+  marks.forEach((m,i) => m.classList.toggle('current', i === state.detailSearchIndex));
+  // 已在可视区则不强制滚动，避免每次输入抖动；仅当前高亮不在视口时滚动
+  const cur = marks[state.detailSearchIndex];
+  if (cur) {
+    const rect = cur.getBoundingClientRect();
+    const bodyRect = els.detailBody.getBoundingClientRect();
+    if (rect.top < bodyRect.top || rect.bottom > bodyRect.bottom) cur.scrollIntoView({ block: 'center' });
+  }
+}
+
+function clearDetailSearchNav() {
+  const counter = document.getElementById('detail-search-count');
+  if (counter) counter.textContent = '';
+  els.detailBody.querySelectorAll('mark.current').forEach(m => m.classList.remove('current'));
+}
+
+function stepDetailSearch(dir) {
+  const marks = els.detailBody.querySelectorAll('mark');
+  const count = marks.length;
+  if (!count) return;
+  state.detailSearchIndex = (state.detailSearchIndex + dir + count) % count;
+  updateDetailSearchNav();
 }
 
 function updateContentArea() {
@@ -2915,6 +2990,59 @@ document.getElementById('detail-body')?.addEventListener('click', (e) => {
   if (toggle) toggle.textContent = collapsed ? '▶' : '▼';
   const summary = node.querySelector(':scope > .j-summary');
   if (summary) summary.classList.toggle('hidden', !collapsed);
+});
+
+// 详情内搜索：Ctrl/Cmd+F 呼出，Esc 关闭，↑↓/Enter 导航
+document.getElementById('detail-search-input')?.addEventListener('input', (e) => {
+  state.detailSearchQuery = e.target.value;
+  state.detailSearchIndex = 0;
+  const id = state.selectedMessageId;
+  if (!id) { clearDetailSearchNav(); return; }
+  const m = (state.messages.get(state.selectedSessionId) || []).find(x => x.id === id);
+  if (m) renderDetailBody(m);
+});
+document.getElementById('detail-search-input')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (e.shiftKey) stepDetailSearch(-1); else stepDetailSearch(1);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    hideDetailSearch();
+  }
+});
+document.getElementById('btn-detail-search-prev')?.addEventListener('click', () => stepDetailSearch(-1));
+document.getElementById('btn-detail-search-next')?.addEventListener('click', () => stepDetailSearch(1));
+document.getElementById('btn-detail-search-close')?.addEventListener('click', () => hideDetailSearch());
+document.addEventListener('keydown', (e) => {
+  const isF = e.key.toLowerCase() === 'f' && (e.ctrlKey || e.metaKey);
+  if (!isF) return;
+  const bar = document.getElementById('detail-search-bar');
+  const detailVisible = !els.detailContent.classList.contains('hidden');
+  if (!detailVisible) return;
+  // 若焦点在发送框等输入区，不劫持
+  const tag = document.activeElement?.tagName;
+  const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable;
+  // 详情搜索优先：若已在详情输入则不重复
+  if (document.activeElement?.id === 'detail-search-input') return;
+  // 仅当详情面板为焦点上下文时劫持，避免影响时间线搜索
+  // 若详情面板内有选中消息，则优先详情搜索
+  if (detailVisible) {
+    e.preventDefault();
+    showDetailSearch();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const bar = document.getElementById('detail-search-bar');
+    if (bar && !bar.classList.contains('hidden')) {
+      // 若详情搜索打开则先关它
+      const active = document.activeElement?.id === 'detail-search-input';
+      if (active || !bar.classList.contains('hidden')) {
+        hideDetailSearch();
+        // 不阻止冒泡，让其他 Esc 逻辑也可执行
+      }
+    }
+  }
 });
 
 document.getElementById('btn-copy-message').addEventListener('click', async () => {

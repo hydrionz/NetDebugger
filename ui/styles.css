@@ -2001,11 +2001,21 @@ dialog select {
   border-radius: 2px;
 }
 
+#detail-body mark.current {
+  background: #ff8c00;
+  color: #ffffff;
+}
+
 :root[data-theme="dark"] .message-body mark,
 :root[data-theme="dark"] #detail-body mark,
 :root[data-theme="dark"] #preview-body mark {
   background: #8a6d00;
   color: #ffffff;
+}
+
+:root[data-theme="dark"] #detail-body mark.current {
+  background: #ff9f1a;
+  color: #1a1a1a;
 }
 
 .app-dialog {
