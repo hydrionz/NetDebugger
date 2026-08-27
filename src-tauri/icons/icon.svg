@@ -5,12 +5,12 @@
       <stop offset="100%" stop-color="#22D3EE"/>
     </linearGradient>
   </defs>
-  <path d="M 512 220 L 750 360 L 750 660 L 512 804 L 274 660 L 274 360 Z" stroke="url(#g49)" stroke-width="32" fill="none" stroke-linejoin="round"/>
-  <ellipse cx="512" cy="512" rx="220" ry="140" stroke="#A78BFA" stroke-width="10" opacity="0.35"/>
-  <ellipse cx="512" cy="512" rx="140" ry="220" stroke="#22D3EE" stroke-width="10" opacity="0.35"/>
-  <circle cx="512" cy="220" r="48" fill="#A78BFA" stroke="white" stroke-width="10"/>
-  <circle cx="750" cy="660" r="48" fill="#22D3EE" stroke="white" stroke-width="10"/>
-  <circle cx="274" cy="660" r="48" fill="#FACC15" stroke="white" stroke-width="10"/>
-  <circle cx="512" cy="512" r="64" fill="white"/>
-  <circle cx="512" cy="512" r="28" fill="#1A0B2E"/>
+  <path d="M 512 140 L 830 320 L 830 704 L 512 884 L 194 704 L 194 320 Z" stroke="url(#g49)" stroke-width="36" fill="none" stroke-linejoin="round"/>
+  <ellipse cx="512" cy="512" rx="280" ry="180" stroke="#A78BFA" stroke-width="12" opacity="0.35"/>
+  <ellipse cx="512" cy="512" rx="180" ry="280" stroke="#22D3EE" stroke-width="12" opacity="0.35"/>
+  <circle cx="512" cy="140" r="56" fill="#A78BFA" stroke="white" stroke-width="12"/>
+  <circle cx="830" cy="704" r="56" fill="#22D3EE" stroke="white" stroke-width="12"/>
+  <circle cx="194" cy="704" r="56" fill="#FACC15" stroke="white" stroke-width="12"/>
+  <circle cx="512" cy="512" r="72" fill="white"/>
+  <circle cx="512" cy="512" r="32" fill="#1A0B2E"/>
 </svg>

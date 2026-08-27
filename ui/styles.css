@@ -633,8 +633,8 @@ body.resizing-h {
 }
 
 .no-selection-icon img {
-  width: 72px;
-  height: 72px;
+  width: 160px;
+  height: 160px;
 }
 
 .no-selection-name {
@@ -1676,8 +1676,8 @@ dialog select {
 }
 
 .about-icon {
-  width: 48px;
-  height: 48px;
+  width: 96px;
+  height: 96px;
 }
 
 .about-name {
