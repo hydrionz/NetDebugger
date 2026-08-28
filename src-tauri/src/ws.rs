@@ -1,6 +1,7 @@
 use crate::db;
 use crate::state::{ClientHandle, ClientMessage, OutgoingKind, OutgoingMessage, SessionHandle, TimelineEvent, WsConfig};
 use futures_util::{SinkExt, StreamExt};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::net::TcpListener;
@@ -691,6 +692,66 @@ where
     manually_stopped
 }
 
+/// 将消息追加写入磁盘日志（仅当会话开启 log_to_disk 时）。
+/// 文件：<log_dir 或 app_local_data_dir/logs>/<会话名>_<YYYY-MM-DD>.log
+async fn append_disk_log(handle: &Arc<SessionHandle>, msg: &db::Message) {
+    if !*handle.log_to_disk.lock().await {
+        return;
+    }
+    let ts = msg.timestamp;
+    let time = chrono::DateTime::from_timestamp_millis(ts)
+        .map(|d| d.format("%Y-%m-%d %H:%M:%S%.3f").to_string())
+        .unwrap_or_default();
+    let date = chrono::DateTime::from_timestamp_millis(ts)
+        .map(|d| d.format("%Y-%m-%d").to_string())
+        .unwrap_or_default();
+    let file_name = format!("{}_{}.log", handle.log_file_base, date);
+
+    // 全局日志目录（设置-通用），空时回退 app_local_data_dir/logs
+    let dir = tauri_plugin_store::StoreExt::store(&handle.app, "store.bin")
+        .ok()
+        .and_then(|s| s.get("log-dir").and_then(|v| v.as_str().map(String::from)))
+        .filter(|d| !d.trim().is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| handle.app.path().app_local_data_dir().map(|p| p.join("logs")).unwrap_or_default());
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let path = dir.join(&file_name);
+
+    let arrow = if msg.direction == "in" { "← 收" } else { "→ 发" };
+    let ep = msg.endpoint.as_deref().unwrap_or("-");
+    let sender = msg.sender.as_deref().unwrap_or("");
+    let sender_part = if sender.is_empty() { String::new() } else { format!(" [{}]", sender) };
+    let body = if msg.payload_type == "binary" {
+        hex_encode(&msg.payload)
+    } else {
+        String::from_utf8_lossy(&msg.payload).into_owned()
+    };
+    let line = format!(
+        "[{}] {} {} ep={}{} size={}\n{}\n\n",
+        time, arrow, msg.payload_type, ep, sender_part, msg.size, body
+    );
+
+    use tokio::io::AsyncWriteExt;
+    let mut file = match tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .await
+    {
+        Ok(f) => f,
+        Err(e) => { eprintln!("disk log open error: {}", e); return; }
+    };
+    if let Err(e) = file.write_all(line.as_bytes()).await {
+        eprintln!("disk log write error: {}", e);
+    }
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ")
+}
+
 async fn persist_in_message(
     db: &db::DbConnection,
     session_id: &str,
@@ -716,6 +777,7 @@ async fn persist_in_message(
         pinned: 0,
     };
     db::insert_message(db, &msg).await.ok();
+    append_disk_log(handle, &msg).await;
     let event = TimelineEvent::Message {
         id: msg.id.clone(),
         session_id: msg.session_id.clone(),
@@ -757,6 +819,7 @@ pub(crate) async fn persist_out_message(
         pinned: 0,
     };
     db::insert_message(db, &msg).await.ok();
+    append_disk_log(handle, &msg).await;
     let event = TimelineEvent::Message {
         id: msg.id.clone(),
         session_id: msg.session_id.clone(),
@@ -811,6 +874,7 @@ async fn persist_notice(
     if let Err(e) = db::insert_message(db, &msg).await {
         eprintln!("insert notice error: {}", e);
     }
+    append_disk_log(handle, &msg).await;
     send_timeline_event(handle, TimelineEvent::Notice {
         session_id: session_id.to_string(),
         text,
@@ -846,6 +910,7 @@ async fn persist_auto_reply_pair(
         pinned: 0,
     };
     let _ = db::insert_message(db, &notice_msg).await;
+    append_disk_log(handle, &notice_msg).await;
     send_timeline_event(handle, TimelineEvent::Notice {
         session_id: session_id.to_string(),
         text: notice_text,
@@ -869,6 +934,7 @@ async fn persist_auto_reply_pair(
         pinned: 0,
     };
     let _ = db::insert_message(db, &out_msg).await;
+    append_disk_log(handle, &out_msg).await;
     let event = TimelineEvent::Message {
         id: out_msg.id.clone(),
         session_id: out_msg.session_id.clone(),

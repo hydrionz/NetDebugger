@@ -21,6 +21,8 @@ pub struct CreateSessionRequest {
     auto_reconnect: Option<i64>,
     heartbeat_interval: Option<i64>,
     auto_replies: Option<Vec<db::AutoReplyRule>>,
+    #[serde(default)]
+    log_to_disk: i64,
 }
 
 #[tauri::command]
@@ -74,6 +76,7 @@ pub async fn create_session(
         req.auto_reconnect,
         req.heartbeat_interval,
         auto_replies,
+        req.log_to_disk,
     )
     .await
     .map_err(|e| e.to_string())
@@ -92,6 +95,8 @@ pub struct UpdateSessionRequest {
     auto_reconnect: Option<i64>,
     heartbeat_interval: Option<i64>,
     auto_replies: Option<Vec<db::AutoReplyRule>>,
+    #[serde(default)]
+    log_to_disk: i64,
 }
 
 /// 校验并规范化 endpoint 路径列表：trim、跳过空串、必须 / 开头、无空白与 ?#、去重保序；全空 → None。
@@ -204,6 +209,7 @@ pub async fn update_session(
         req.auto_reconnect,
         req.heartbeat_interval,
         auto_replies,
+        req.log_to_disk,
     )
     .await
     .map_err(|e| e.to_string())
@@ -226,6 +232,43 @@ pub async fn update_auto_replies(
     if let Some(h) = state.sessions.read().await.get(&id).cloned() {
         *h.auto_replies.lock().await = auto_replies;
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_session_logging(state: State<'_ , AppState>, id: String, enabled: bool) -> Result<(), String> {
+    let flag = if enabled { 1 } else { 0 };
+    db::update_session_logging(&state.db, &id, flag).await.map_err(|e| e.to_string())?;
+    // 运行时动态生效：同步更新内存中的开关
+    if let Some(h) = state.sessions.read().await.get(&id).cloned() {
+        *h.log_to_disk.lock().await = enabled;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn pick_log_dir() -> Result<Option<String>, String> {
+    let dir = rfd::AsyncFileDialog::new()
+        .set_title("选择日志保存目录")
+        .pick_folder()
+        .await;
+    Ok(dir.map(|d| d.path().to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+pub fn get_log_dir(app: AppHandle) -> Result<String, String> {
+    let store = app.store("store.bin").map_err(|e| e.to_string())?;
+    Ok(store
+        .get("log-dir")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_default())
+}
+
+#[tauri::command]
+pub fn set_log_dir(app: AppHandle, dir: String) -> Result<(), String> {
+    let store = app.store("store.bin").map_err(|e| e.to_string())?;
+    store.set("log-dir", json!(dir));
+    store.save().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -437,6 +480,7 @@ pub async fn import_workspace(state: State<'_, AppState>) -> Result<Option<Strin
                     s.auto_reconnect,
                     s.heartbeat_interval,
                     s.auto_replies,
+                    s.log_to_disk,
                 )
                 .await
                 .map_err(|e| e.to_string())?;
@@ -463,6 +507,7 @@ pub async fn import_workspace(state: State<'_, AppState>) -> Result<Option<Strin
                 s.auto_reconnect,
                 s.heartbeat_interval,
                 s.auto_replies,
+                s.log_to_disk,
             )
             .await
             .map_err(|e| e.to_string())?;
@@ -555,6 +600,17 @@ pub async fn start_session(
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel::<OutgoingMessage>(256);
+    // 日志文件名与左侧树节点显示名称一致：name || (server ? bind_addr : target_url)
+    let display_name = session.name.clone().unwrap_or_else(|| {
+        if session.role == "server" {
+            session.bind_addr.clone().unwrap_or_else(|| ":?".to_string())
+        } else {
+            session.target_url.clone().unwrap_or_else(|| "?".to_string())
+        }
+    });
+    let log_file_base: String = display_name.chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
     let handle = Arc::new(SessionHandle {
         app: app.clone(),
         shutdown_tx,
@@ -564,6 +620,8 @@ pub async fn start_session(
         last_pong_at: Arc::new(tokio::sync::Mutex::new(None)),
         manual_ping_pending: Arc::new(tokio::sync::Mutex::new(false)),
         auto_replies: Arc::new(tokio::sync::Mutex::new(session.auto_replies.clone())),
+        log_to_disk: Arc::new(tokio::sync::Mutex::new(session.log_to_disk > 0)),
+        log_file_base,
     });
 
     {

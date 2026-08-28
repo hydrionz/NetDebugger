@@ -128,6 +128,14 @@
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
               </svg>
             </button>
+            <button id="btn-log-toggle" class="icon-btn" data-tip="日志未落盘（点击开启）" aria-label="持续落盘日志" aria-pressed="false">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </button>
             <button id="btn-stats" class="icon-btn" data-tip="流量统计" aria-label="流量统计">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 4-6"/>
@@ -353,6 +361,13 @@
           <label class="checkbox-label">
             <input type="checkbox" id="setting-minimize-to-tray" />
             关闭后最小化到系统托盘
+          </label>
+          <label class="settings-row" style="margin-top:8px">
+            <span>日志目录</span>
+            <div style="display:flex; gap:6px; flex:1; min-width:0">
+              <input type="text" id="setting-log-dir" readonly placeholder="默认：应用数据目录/logs" style="flex:1; min-width:0" data-tip="消息持续落盘日志保存目录" />
+              <button type="button" id="btn-pick-log-dir">选择目录…</button>
+            </div>
           </label>
         </div>
         <div class="settings-pane hidden" data-settings-pane="shortcuts">

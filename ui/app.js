@@ -110,6 +110,8 @@ const els = {
   filterJsonPath: document.getElementById('filter-jsonpath'),
   settingsView: document.getElementById('dlg-settings'),
   settingMinimizeToTray: document.getElementById('setting-minimize-to-tray'),
+  settingLogDir: document.getElementById('setting-log-dir'),
+  btnPickLogDir: document.getElementById('btn-pick-log-dir'),
   themeBtn: document.getElementById('btn-theme'),
   themeMenu: document.getElementById('theme-menu'),
   dlgCloseConfirm: document.getElementById('dlg-close-confirm'),
@@ -393,12 +395,16 @@ function renderProjectTree() {
       const expander = hasEps
         ? `<span class="session-expander" data-tip="${collapsed ? '展开' : '折叠'}">${collapsed ? '▶' : '▼'}</span>`
         : '';
+      const logBadge = s.log_to_disk
+        ? `<span class="session-log-badge" data-tip="日志落盘中">▤</span>`
+        : '';
 
       item.innerHTML = `
         ${expander}
         <span class="session-type ${s.status}">${escapeHtml(typeLabel)}</span>
         <span class="role-badge ${roleClass}" data-tip="${roleTitle}">${escapeHtml(roleLabel)}</span>
         <span class="session-name">${escapeHtml(displayName)}</span>
+        ${logBadge}
         ${badge}
         <span class="session-actions">
           <button data-action="${toggleAction}" data-session="${s.id}" class="${toggleClass}" data-tip="${toggleTitle}">${toggleIcon}</button>
@@ -1539,6 +1545,11 @@ async function saveSession() {
       if (editId) { const cur = findSession(editId); return cur?.auto_replies ?? null; }
       return null;
     })(),
+    // 落盘开关由工具栏按钮控制，此处保留原值（新建为 0）
+    log_to_disk: (() => {
+      if (editId) { const cur = findSession(editId); return cur?.log_to_disk ? 1 : 0; }
+      return 0;
+    })(),
   };
   try {
     if (editId) {
@@ -2075,6 +2086,47 @@ function initStats() {
   setInterval(() => renderStats(), 1000);
 }
 
+// ─── 持续落盘日志（工具栏开关 + 树角标，状态源为 session.log_to_disk）───
+function findSessionById(id) {
+  for (const p of state.projects) {
+    const s = p.sessions.find((x) => x.id === id);
+    if (s) return s;
+  }
+  return null;
+}
+
+function refreshLogState() {
+  const btn = document.getElementById('btn-log-toggle');
+  if (btn) {
+    const s = findSessionById(state.selectedSessionId);
+    const on = !!s && !!s.log_to_disk;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.dataset.tip = on ? '日志落盘中（点击关闭）' : '日志未落盘（点击开启）';
+  }
+}
+
+async function toggleSessionLogging() {
+  const s = findSessionById(state.selectedSessionId);
+  if (!s) return;
+  const next = !s.log_to_disk;
+  try {
+    await invoke('set_session_logging', { id: s.id, enabled: next });
+    s.log_to_disk = next ? 1 : 0;
+    refreshLogState();
+    renderProjectTree();
+    showToast(next ? '已开启日志落盘' : '已关闭日志落盘');
+  } catch (e) {
+    showError('切换日志落盘失败: ' + e);
+  }
+}
+
+function initLogToggle() {
+  const btn = document.getElementById('btn-log-toggle');
+  if (!btn) return;
+  btn.addEventListener('click', toggleSessionLogging);
+}
+
 function renderDetail() {
   const id = state.selectedMessageId;
   if (!id) {
@@ -2265,6 +2317,7 @@ function updateContentArea() {
   } else {
     contentArea.classList.add('no-selection');
   }
+  refreshLogState();
 }
 
 function updateSendArea() {
@@ -2586,6 +2639,15 @@ document.getElementById('btn-project-ok').addEventListener('click', (ev) => {
 document.getElementById('btn-session-ok').addEventListener('click', (ev) => {
   ev.preventDefault();
   saveSession();
+});
+
+els.btnPickLogDir.addEventListener('click', async () => {
+  try {
+    const dir = await invoke('pick_log_dir');
+    if (dir) els.settingLogDir.value = dir;
+  } catch (e) {
+    showError('选择目录失败: ' + e);
+  }
 });
 
 els.sessionRole.addEventListener('change', () => {
@@ -3532,6 +3594,9 @@ async function openSettingsView() {
   try {
     const minimize = await invoke('get_minimize_to_tray');
     els.settingMinimizeToTray.checked = minimize;
+    if (els.settingLogDir) {
+      els.settingLogDir.value = await invoke('get_log_dir') || '';
+    }
     if (els.settingSendKeyMode) {
       els.settingSendKeyMode.value = state.sendKeyMode;
     }
@@ -3581,6 +3646,9 @@ async function saveSettings() {
   }
   try {
     await invoke('set_minimize_to_tray', { value: minimize });
+    if (els.settingLogDir) {
+      await invoke('set_log_dir', { dir: els.settingLogDir.value.trim() });
+    }
     closeSettingsView();
   } catch (e) {
     showError('保存设置失败: ' + e);
@@ -4071,6 +4139,7 @@ async function initTheme() {
   initSendKeyMode();
   initTruncateToggle();
   initStats();
+  initLogToggle();
   initTemplateResize();
   initTemplateDrag();
   loadTemplates();

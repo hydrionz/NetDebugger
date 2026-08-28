@@ -1911,6 +1911,19 @@ dialog select {
   background: var(--selected-bg);
 }
 
+#btn-log-toggle.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--selected-bg);
+}
+
+.session-log-badge {
+  color: var(--accent);
+  font-size: 10px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
 #timeline-filter {
   font-size: 11px;
   padding: 2px 6px;

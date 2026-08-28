@@ -91,6 +91,10 @@ pub struct SessionHandle {
     pub manual_ping_pending: Arc<Mutex<bool>>,
     /// 自动回复规则（运行时可动态更新，无需重启）
     pub auto_replies: Arc<Mutex<Option<Vec<crate::db::AutoReplyRule>>>>,
+    /// 持续落盘日志开关（运行时可动态更新）
+    pub log_to_disk: Arc<Mutex<bool>>,
+    /// 日志文件名前缀（会话名，非法字符已替换为 _；无名称时回退为 bind_addr/target_url）
+    pub log_file_base: String,
 }
 
 pub struct AppState {

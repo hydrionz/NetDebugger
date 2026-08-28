@@ -50,6 +50,8 @@ pub struct Session {
     pub auto_reconnect: Option<i64>,
     pub heartbeat_interval: Option<i64>,
     pub auto_replies: Option<Vec<AutoReplyRule>>,
+    #[serde(default)]
+    pub log_to_disk: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +101,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/010_heartbeat.sql"),
     include_str!("../migrations/011_auto_replies.sql"),
     include_str!("../migrations/012_pinned.sql"),
+    include_str!("../migrations/013_log_to_disk.sql"),
+    include_str!("../migrations/014_drop_log_dir.sql"),
 ];
 
 pub async fn open_db(path: &str) -> Result<Connection> {
@@ -252,7 +256,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
         let mut result = Vec::with_capacity(projects.len());
         for project in projects {
             let mut stmt = conn.prepare(
-                "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints, headers, subprotocols, auto_reconnect, heartbeat_interval, auto_replies \
+                "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints, headers, subprotocols, auto_reconnect, heartbeat_interval, auto_replies, log_to_disk \
                  FROM sessions WHERE project_id = ?1 ORDER BY created_at",
             )?;
             let sessions = stmt
@@ -281,6 +285,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
                         auto_reconnect: row.get(15)?,
                         heartbeat_interval: row.get(16)?,
                         auto_replies: auto_replies_raw.and_then(|s| serde_json::from_str(&s).ok()),
+                        log_to_disk: row.get(18)?,
                     })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -289,7 +294,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
 
         // Ungrouped sessions
         let mut stmt = conn.prepare(
-            "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints, headers, subprotocols, auto_reconnect, heartbeat_interval, auto_replies \
+            "SELECT id, project_id, name, protocol, role, status, bind_addr, target_url, local_addr, remote_addr, created_at, updated_at, endpoints, headers, subprotocols, auto_reconnect, heartbeat_interval, auto_replies, log_to_disk \
              FROM sessions WHERE project_id IS NULL ORDER BY created_at",
         )?;
         let ungrouped = stmt
@@ -317,6 +322,7 @@ pub async fn list_projects_with_sessions(conn: &Connection) -> Result<Vec<Projec
                     auto_reconnect: row.get(15)?,
                     heartbeat_interval: row.get(16)?,
                     auto_replies: auto_replies_raw.and_then(|s| serde_json::from_str(&s).ok()),
+                    log_to_disk: row.get(18)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -352,6 +358,7 @@ pub async fn create_session(
     auto_reconnect: Option<i64>,
     heartbeat_interval: Option<i64>,
     auto_replies: Option<Vec<AutoReplyRule>>,
+    log_to_disk: i64,
 ) -> Result<Session> {
     let now = chrono::Utc::now().timestamp_millis();
     let id = Uuid::new_v4().to_string();
@@ -367,8 +374,8 @@ pub async fn create_session(
 
     conn.call(move |conn| {
         conn.execute(
-            "INSERT INTO sessions (id, project_id, name, protocol, role, status, bind_addr, target_url, endpoints, headers, subprotocols, auto_reconnect, heartbeat_interval, auto_replies, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            "INSERT INTO sessions (id, project_id, name, protocol, role, status, bind_addr, target_url, endpoints, headers, subprotocols, auto_reconnect, heartbeat_interval, auto_replies, log_to_disk, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 &id,
                 &project_id,
@@ -384,6 +391,7 @@ pub async fn create_session(
                 &auto_reconnect,
                 &heartbeat_interval,
                 &auto_replies_json,
+                &log_to_disk,
                 &now.to_string(),
                 &now.to_string(),
             ],
@@ -407,6 +415,7 @@ pub async fn create_session(
             auto_reconnect,
             heartbeat_interval,
             auto_replies,
+            log_to_disk,
         })
     })
     .await
@@ -426,6 +435,7 @@ pub async fn update_session(
     auto_reconnect: Option<i64>,
     heartbeat_interval: Option<i64>,
     auto_replies: Option<Vec<AutoReplyRule>>,
+    log_to_disk: i64,
 ) -> Result<()> {
     let id = id.to_string();
     let project_id = project_id.map(|s| s.to_string());
@@ -438,7 +448,7 @@ pub async fn update_session(
 
     conn.call(move |conn| {
         conn.execute(
-            "UPDATE sessions SET project_id = ?2, name = ?3, bind_addr = ?4, target_url = ?5, endpoints = ?6, headers = ?7, subprotocols = ?8, auto_reconnect = ?9, heartbeat_interval = ?10, auto_replies = ?11, updated_at = ?12 WHERE id = ?1",
+            "UPDATE sessions SET project_id = ?2, name = ?3, bind_addr = ?4, target_url = ?5, endpoints = ?6, headers = ?7, subprotocols = ?8, auto_reconnect = ?9, heartbeat_interval = ?10, auto_replies = ?11, log_to_disk = ?12, updated_at = ?13 WHERE id = ?1",
             params![
                 &id,
                 &project_id,
@@ -451,6 +461,7 @@ pub async fn update_session(
                 &auto_reconnect,
                 &heartbeat_interval,
                 &auto_replies_json,
+                &log_to_disk,
                 &now.to_string(),
             ],
         )?;
@@ -503,6 +514,20 @@ pub async fn update_auto_replies(conn: &Connection, id: &str, auto_replies: Opti
     })
     .await
     .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("update auto_replies: {}", e))
+}
+
+pub async fn update_session_logging(conn: &Connection, id: &str, log_to_disk: i64) -> Result<()> {
+    let id = id.to_string();
+    let now = chrono::Utc::now().timestamp_millis();
+    conn.call(move |conn| {
+        conn.execute(
+            "UPDATE sessions SET log_to_disk = ?2, updated_at = ?3 WHERE id = ?1",
+            params![&id, &log_to_disk, &now.to_string()],
+        )?;
+        Ok(())
+    })
+    .await
+    .map_err(|e: tokio_rusqlite::Error| anyhow::anyhow!("update session logging: {}", e))
 }
 
 pub async fn delete_session(conn: &Connection, id: &str) -> Result<()> {
