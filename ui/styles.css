@@ -1342,6 +1342,13 @@ body.resizing-h {
   opacity: 0.6;
 }
 
+.detail-invalid-json {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 12px;
+  user-select: none;
+}
+
 .detail-row {
   margin-bottom: 8px;
   color: var(--text-muted);

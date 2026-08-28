@@ -2169,12 +2169,10 @@ function renderDetailBody(m) {
         els.detailBody.innerHTML = `<div class="j-tree">${buildJsonTree(parsed, q, 0)}</div>`;
       } else {
         const pretty = JSON.stringify(parsed, null, 2);
-        els.detailBody.innerHTML = q ? highlightJson(pretty, q) : escapeHtml(pretty);
+        els.detailBody.innerHTML = highlightJson(pretty, q);
       }
     } catch {
-      const fallback = bytesToText(bytes);
-      if (q) els.detailBody.innerHTML = highlightText(fallback, q);
-      else els.detailBody.textContent = fallback;
+      els.detailBody.innerHTML = '<div class="detail-invalid-json">不是有效的JSON</div>';
     }
   } else {
     const text = bytesToText(bytes);
