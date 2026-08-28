@@ -1975,6 +1975,58 @@ dialog select {
   transform: translateY(-6px);
 }
 
+.update-progress {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 9999;
+  width: 300px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
+.update-progress-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.update-progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-hover);
+  overflow: hidden;
+}
+
+.update-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.update-progress-fill.indeterminate {
+  width: 30% !important;
+  animation: update-progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes update-progress-slide {
+  0% { margin-left: -30%; }
+  100% { margin-left: 100%; }
+}
+
+.update-progress-text {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .tooltip {
   position: fixed;
   z-index: 99999;

@@ -3919,6 +3919,57 @@ function setAboutUpdateChecking(checking) {
   if (spinner) spinner.classList.toggle('hidden', !checking);
 }
 
+// ─── 更新下载进度浮窗 ───
+let updateDownloaded = 0;
+let updateContentLength = 0;
+let updateProgressVisible = false;
+
+function showUpdateProgress(visible) {
+  updateProgressVisible = visible;
+  const el = document.getElementById('update-progress');
+  if (!el) return;
+  el.classList.toggle('hidden', !visible);
+  if (visible) {
+    updateDownloaded = 0;
+    updateContentLength = 0;
+    const fill = document.getElementById('update-progress-fill');
+    const text = document.getElementById('update-progress-text');
+    if (fill) { fill.classList.remove('indeterminate'); fill.style.width = '0%'; }
+    if (text) text.textContent = '准备中…';
+  }
+}
+
+function onUpdateDownloadEvent(event) {
+  const fill = document.getElementById('update-progress-fill');
+  const text = document.getElementById('update-progress-text');
+  if (!fill || !text) return;
+  switch (event.event) {
+    case 'Started': {
+      updateContentLength = event.data.contentLength || 0;
+      if (!updateContentLength) fill.classList.add('indeterminate');
+      break;
+    }
+    case 'Progress': {
+      updateDownloaded += event.data.chunkLength;
+      if (updateContentLength > 0) {
+        fill.classList.remove('indeterminate');
+        const pct = Math.min(100, Math.round(updateDownloaded / updateContentLength * 100));
+        fill.style.width = pct + '%';
+        text.textContent = `${formatBytesShort(updateDownloaded)} / ${formatBytesShort(updateContentLength)} · ${pct}%`;
+      } else {
+        text.textContent = `已下载 ${formatBytesShort(updateDownloaded)}`;
+      }
+      break;
+    }
+    case 'Finished': {
+      fill.classList.remove('indeterminate');
+      fill.style.width = '100%';
+      text.textContent = '下载完成，正在安装…';
+      break;
+    }
+  }
+}
+
 // ─── 自动更新 ───
 let hasUpdate = false;
 
@@ -3977,7 +4028,13 @@ async function checkForUpdates(silent = false) {
       if (!silent) {
         const action = await showUpdateDialog(currentVersion, update.version);
         if (action === 'update') {
-          await update.downloadAndInstall();
+          showUpdateProgress(true);
+          try {
+            await update.downloadAndInstall(onUpdateDownloadEvent);
+          } catch (e) {
+            showUpdateProgress(false);
+            throw e;
+          }
         }
       }
     } else {
